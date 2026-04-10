@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 from uuid import uuid4
 
+import gspread
 import pandas as pd
 import streamlit as st
 
@@ -28,6 +29,8 @@ BY_STUDENT_RESPONSES_DIR = os.path.join(RESPONSES_DIR, "by_student")
 BY_STUDENT_EVALUATIONS_DIR = os.path.join(EVALUATIONS_DIR, "by_student")
 RESPONSES_FILE = os.path.join(RESPONSES_DIR, "questionnaire_responses.csv")
 EVALUATIONS_FILE = os.path.join(EVALUATIONS_DIR, "state_evaluations.csv")
+DEFAULT_RESPONSES_WORKSHEET = "questionnaire_responses"
+DEFAULT_EVALUATIONS_WORKSHEET = "state_evaluations"
 
 MIN_SENTENCES = 2
 RECOMMENDED_SENTENCES = 3
@@ -328,6 +331,98 @@ def ensure_output_directories():
     os.makedirs(EVALUATIONS_DIR, exist_ok=True)
     os.makedirs(BY_STUDENT_RESPONSES_DIR, exist_ok=True)
     os.makedirs(BY_STUDENT_EVALUATIONS_DIR, exist_ok=True)
+
+
+def get_google_sheets_config() -> dict:
+    if "google_service_account" not in st.secrets or "google_sheets" not in st.secrets:
+        return {"enabled": False}
+
+    sheet_settings = dict(st.secrets["google_sheets"])
+    spreadsheet_id = sheet_settings.get("spreadsheet_id", "").strip()
+
+    if not spreadsheet_id:
+        return {"enabled": False}
+
+    return {
+        "enabled": True,
+        "service_account": dict(st.secrets["google_service_account"]),
+        "spreadsheet_id": spreadsheet_id,
+        "responses_worksheet": sheet_settings.get("responses_worksheet", DEFAULT_RESPONSES_WORKSHEET),
+        "evaluations_worksheet": sheet_settings.get("evaluations_worksheet", DEFAULT_EVALUATIONS_WORKSHEET),
+    }
+
+
+@st.cache_resource
+def get_gspread_client(service_account_info: dict):
+    return gspread.service_account_from_dict(service_account_info)
+
+
+def get_google_spreadsheet(config: dict):
+    client = get_gspread_client(config["service_account"])
+    return client.open_by_key(config["spreadsheet_id"])
+
+
+def ensure_worksheet(spreadsheet, worksheet_name: str, headers: list):
+    try:
+        worksheet = spreadsheet.worksheet(worksheet_name)
+    except gspread.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(
+            title=worksheet_name,
+            rows=max(1000, len(headers) + 10),
+            cols=max(26, len(headers) + 10),
+        )
+
+    existing_headers = worksheet.row_values(1)
+    merged_headers = list(existing_headers)
+
+    for header in headers:
+        if header not in merged_headers:
+            merged_headers.append(header)
+
+    if len(merged_headers) > worksheet.col_count:
+        worksheet.add_cols(len(merged_headers) - worksheet.col_count)
+
+    if not existing_headers:
+        worksheet.update("A1", [merged_headers])
+    elif merged_headers != existing_headers:
+        worksheet.update("A1", [merged_headers])
+
+    return worksheet, merged_headers
+
+
+def append_rows_to_google_sheet(spreadsheet, worksheet_name: str, rows: list):
+    if not rows:
+        return
+
+    headers = []
+    for row in rows:
+        for key in row.keys():
+            if key not in headers:
+                headers.append(key)
+
+    worksheet, merged_headers = ensure_worksheet(spreadsheet, worksheet_name, headers)
+    values = [[row.get(header, "") for header in merged_headers] for row in rows]
+    worksheet.append_rows(values, value_input_option="USER_ENTERED")
+
+
+def save_rows(rows: list, local_file_path: str, google_worksheet_name: str):
+    google_config = get_google_sheets_config()
+
+    if google_config["enabled"]:
+        spreadsheet = get_google_spreadsheet(google_config)
+        append_rows_to_google_sheet(spreadsheet, google_worksheet_name, rows)
+        return {
+            "backend": "google_sheets",
+            "spreadsheet_id": google_config["spreadsheet_id"],
+            "spreadsheet_url": f"https://docs.google.com/spreadsheets/d/{google_config['spreadsheet_id']}",
+            "worksheet_name": google_worksheet_name,
+        }
+
+    append_rows(local_file_path, rows)
+    return {
+        "backend": "local_csv",
+        "file_path": local_file_path,
+    }
 
 
 def get_all_questions(questionnaire: dict) -> list:
@@ -879,6 +974,7 @@ def initialize_session_state():
         "last_submission_id": "",
         "last_response_file": "",
         "last_evaluation_file": "",
+        "last_storage_backend": "",
     }
 
     for key, value in defaults.items():
@@ -898,6 +994,7 @@ def reset_session_state():
         "last_submission_id",
         "last_response_file",
         "last_evaluation_file",
+        "last_storage_backend",
     ]
 
     for key in keys_to_clear:
@@ -927,6 +1024,7 @@ def initialize_questionnaire_widgets(questionnaire: dict):
 # -----------------------------
 initialize_session_state()
 ensure_output_directories()
+google_sheets_config = get_google_sheets_config()
 
 
 # -----------------------------
@@ -941,10 +1039,9 @@ if st.session_state.submission_complete:
     if st.session_state.participant_id_value:
         st.write(f"Participant ID / 참가자 ID: `{st.session_state.participant_id_value}`")
     st.write(f"Submission ID: `{st.session_state.last_submission_id}`")
-    st.write(f"Student response file: `{st.session_state.last_response_file}`")
-    st.write(f"Student evaluation file: `{st.session_state.last_evaluation_file}`")
-    st.write(f"Master responses file: `{RESPONSES_FILE}`")
-    st.write(f"Master evaluations file: `{EVALUATIONS_FILE}`")
+    st.write(f"Storage backend: `{st.session_state.last_storage_backend}`")
+    st.write(f"Responses destination: `{st.session_state.last_response_file}`")
+    st.write(f"Evaluations destination: `{st.session_state.last_evaluation_file}`")
 
     if st.button("Start New Participant", use_container_width=True):
         reset_session_state()
@@ -967,6 +1064,18 @@ if current_index > 0 and not st.session_state.student_name_value:
 
 st.caption(f"Step {current_index + 1} of {len(QUESTIONNAIRES)}")
 st.progress((current_index + 1) / len(QUESTIONNAIRES))
+
+if google_sheets_config["enabled"]:
+    st.success(
+        "Storage mode: Google Sheets\n\n"
+        f"Spreadsheet ID: `{google_sheets_config['spreadsheet_id']}`\n\n"
+        f"Worksheets: `{google_sheets_config['responses_worksheet']}` and `{google_sheets_config['evaluations_worksheet']}`"
+    )
+else:
+    st.warning(
+        "Storage mode: Local CSV fallback. Google Sheets is not configured yet.\n\n"
+        f"Current local files: `{RESPONSES_FILE}` and `{EVALUATIONS_FILE}`"
+    )
 
 st.info(
     "This activity checks how students respond to a CEFR-level story and a literature passage. "
@@ -1149,18 +1258,41 @@ if next_clicked or submit_clicked:
                 )
             )
 
-        student_response_file, student_evaluation_file = get_student_file_paths(st.session_state.student_name_value)
+        try:
+            response_save_result = save_rows(
+                rows=response_rows,
+                local_file_path=RESPONSES_FILE,
+                google_worksheet_name=google_sheets_config.get("responses_worksheet", DEFAULT_RESPONSES_WORKSHEET),
+            )
+            evaluation_save_result = save_rows(
+                rows=evaluation_rows,
+                local_file_path=EVALUATIONS_FILE,
+                google_worksheet_name=google_sheets_config.get("evaluations_worksheet", DEFAULT_EVALUATIONS_WORKSHEET),
+            )
+        except Exception as error:
+            st.error(
+                "Saving failed. Please check the Google Sheets configuration in Streamlit secrets.\n\n"
+                f"Error: {error}"
+            )
+        else:
+            st.session_state.last_submission_id = submission_id
+            st.session_state.last_storage_backend = response_save_result["backend"]
 
-        append_rows(RESPONSES_FILE, response_rows)
-        append_rows(EVALUATIONS_FILE, evaluation_rows)
-        append_rows(student_response_file, response_rows)
-        append_rows(student_evaluation_file, evaluation_rows)
+            if response_save_result["backend"] == "google_sheets":
+                st.session_state.last_response_file = (
+                    f"{response_save_result['spreadsheet_url']} / "
+                    f"{response_save_result['worksheet_name']}"
+                )
+                st.session_state.last_evaluation_file = (
+                    f"{evaluation_save_result['spreadsheet_url']} / "
+                    f"{evaluation_save_result['worksheet_name']}"
+                )
+            else:
+                st.session_state.last_response_file = response_save_result["file_path"]
+                st.session_state.last_evaluation_file = evaluation_save_result["file_path"]
 
-        st.session_state.last_submission_id = submission_id
-        st.session_state.last_response_file = student_response_file
-        st.session_state.last_evaluation_file = student_evaluation_file
-        st.session_state.submission_complete = True
-        st.rerun()
+            st.session_state.submission_complete = True
+            st.rerun()
 
 st.markdown("---")
 st.caption("Prototype for CEFR story and literature-based state evaluation")
