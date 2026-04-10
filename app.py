@@ -345,6 +345,30 @@ def extract_spreadsheet_id(value: str) -> str:
     return value
 
 
+def normalize_private_key(private_key: str) -> str:
+    if not private_key:
+        return ""
+
+    normalized = private_key.strip()
+
+    if normalized.startswith('"') and normalized.endswith('"'):
+        normalized = normalized[1:-1]
+
+    normalized = normalized.replace("\\n", "\n")
+    normalized = normalized.replace("\r\n", "\n")
+
+    return normalized
+
+
+def normalize_service_account_info(service_account_info: dict) -> dict:
+    normalized = dict(service_account_info)
+
+    if "private_key" in normalized:
+        normalized["private_key"] = normalize_private_key(str(normalized["private_key"]))
+
+    return normalized
+
+
 def get_google_sheets_config() -> dict:
     google_service_account = None
     sheet_settings = None
@@ -384,7 +408,7 @@ def get_google_sheets_config() -> dict:
 
     return {
         "enabled": True,
-        "service_account": google_service_account,
+        "service_account": normalize_service_account_info(google_service_account),
         "spreadsheet_id": spreadsheet_id,
         "responses_worksheet": sheet_settings.get("responses_worksheet", DEFAULT_RESPONSES_WORKSHEET),
         "evaluations_worksheet": sheet_settings.get("evaluations_worksheet", DEFAULT_EVALUATIONS_WORKSHEET),
