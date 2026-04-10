@@ -25,6 +25,18 @@ In Streamlit Community Cloud:
 4. Paste the values from `.streamlit/secrets.example.toml`.
 5. Replace the example values with your real service account JSON fields and spreadsheet ID.
 
+The app supports both of these secrets formats:
+
+1. Recommended:
+   - `[google_service_account]`
+   - `[google_sheets]`
+2. Compatible alternative:
+   - `[connections.gsheets]`
+
+For the spreadsheet target, you can use either:
+- `spreadsheet_id = "your-sheet-id"`
+- `spreadsheet_url = "https://docs.google.com/spreadsheets/d/.../edit"`
+
 ## 4. Worksheets used by the app
 
 - `questionnaire_responses`

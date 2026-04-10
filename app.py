@@ -333,19 +333,58 @@ def ensure_output_directories():
     os.makedirs(BY_STUDENT_EVALUATIONS_DIR, exist_ok=True)
 
 
+def extract_spreadsheet_id(value: str) -> str:
+    if not value:
+        return ""
+
+    value = value.strip()
+    match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", value)
+    if match:
+        return match.group(1)
+
+    return value
+
+
 def get_google_sheets_config() -> dict:
-    if "google_service_account" not in st.secrets or "google_sheets" not in st.secrets:
+    google_service_account = None
+    sheet_settings = None
+
+    if "google_service_account" in st.secrets and "google_sheets" in st.secrets:
+        google_service_account = dict(st.secrets["google_service_account"])
+        sheet_settings = dict(st.secrets["google_sheets"])
+    elif "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+        connection_settings = dict(st.secrets["connections"]["gsheets"])
+        google_service_account = {
+            key: connection_settings[key]
+            for key in [
+                "type",
+                "project_id",
+                "private_key_id",
+                "private_key",
+                "client_email",
+                "client_id",
+                "auth_uri",
+                "token_uri",
+                "auth_provider_x509_cert_url",
+                "client_x509_cert_url",
+                "universe_domain",
+            ]
+            if key in connection_settings
+        }
+        sheet_settings = connection_settings
+    else:
         return {"enabled": False}
 
-    sheet_settings = dict(st.secrets["google_sheets"])
-    spreadsheet_id = sheet_settings.get("spreadsheet_id", "").strip()
-
+    spreadsheet_id = extract_spreadsheet_id(sheet_settings.get("spreadsheet_id", ""))
     if not spreadsheet_id:
+        spreadsheet_id = extract_spreadsheet_id(sheet_settings.get("spreadsheet_url", ""))
+
+    if not spreadsheet_id or not google_service_account:
         return {"enabled": False}
 
     return {
         "enabled": True,
-        "service_account": dict(st.secrets["google_service_account"]),
+        "service_account": google_service_account,
         "spreadsheet_id": spreadsheet_id,
         "responses_worksheet": sheet_settings.get("responses_worksheet", DEFAULT_RESPONSES_WORKSHEET),
         "evaluations_worksheet": sheet_settings.get("evaluations_worksheet", DEFAULT_EVALUATIONS_WORKSHEET),
