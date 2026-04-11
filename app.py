@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import re
@@ -115,6 +116,7 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q3",
                 "layer": "Emotion",
                 "type": "Self",
+                "depends_on": "q2",
                 "question_goal": "Ask how the student would feel in a similar English-class situation.",
                 "criteria_focus": "Target FLA and FLE without naming the labels. Encourage feelings such as nervous, worried, afraid, comfortable, relaxed, interested, happy, or enjoying the class.",
             },
@@ -136,6 +138,7 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q5",
                 "layer": "Cognition",
                 "type": "Self",
+                "depends_on": "q4",
                 "question_goal": "Ask what the student would think in a similar English-class situation.",
                 "criteria_focus": "Target self-efficacy and metacognition without naming the labels. Encourage reflection on ability, confidence, noticing problems, and managing or improving learning.",
             },
@@ -157,6 +160,7 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q7",
                 "layer": "Behavior",
                 "type": "Self",
+                "depends_on": "q6",
                 "question_goal": "Ask what the student would do in a similar English-class situation.",
                 "criteria_focus": "Target WTC, coping, and engagement without naming the labels. Encourage reflection on speaking, staying quiet, asking for help, preparing, practicing, avoiding, or participating.",
             },
@@ -178,6 +182,7 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q9",
                 "layer": "Strategy",
                 "type": "Self",
+                "depends_on": "q8",
                 "question_goal": "Ask what helps the student most in a similar English-class situation.",
                 "criteria_focus": "Target Oxford-based strategy type and quality without naming the labels. Encourage strategy examples such as practice, planning, calming down, asking others, guessing, or using simple words.",
             },
@@ -235,6 +240,78 @@ Strategy
   Limited: simple or repetitive strategy such as only memorize.
   Avoidant: mainly avoidance.
 """
+
+PERSONALIZED_SELF_QUESTION_SPECS = {
+    "q3": {
+        "state_targets": "FLA / FLE",
+        "criteria_focus": (
+            "Generate a self question for English class that connects the student's character-emotion answer "
+            "to their own emotional state. It should help reveal anxiety versus enjoyment without naming the labels."
+        ),
+        "fallback_en": (
+            "Based on your answer to {source_label} about {character_focus}, when you feel something similar "
+            "in English class, how do you feel? Explain whether you feel nervous, comfortable, interested, "
+            "happy, or something else, and why."
+        ),
+        "fallback_ko": (
+            "{character_focus}에 대한 {source_label} 답변을 바탕으로, 영어 수업에서 비슷한 느낌이 들 때 "
+            "당신은 어떤 기분이 드나요? 긴장되는지, 편안한지, 흥미로운지, 행복한지, 또는 다른 감정이 "
+            "드는지와 그 이유를 설명해 보세요."
+        ),
+        "note": "Personalized from your character response to check emotion in English class.",
+    },
+    "q5": {
+        "state_targets": "Self-efficacy / Metacognition",
+        "criteria_focus": (
+            "Generate a self question for English class that connects the student's character-thinking answer "
+            "to their own confidence, self-awareness, noticing problems, and regulation."
+        ),
+        "fallback_en": (
+            "Based on your answer to {source_label} about {character_focus}, in a similar situation in English class, "
+            "what would you think about your English ability? How would you notice your problem and try to manage it?"
+        ),
+        "fallback_ko": (
+            "{character_focus}에 대한 {source_label} 답변을 바탕으로, 영어 수업에서 비슷한 상황이라면 "
+            "자신의 영어 능력에 대해 어떤 생각이 들까요? 자신의 문제를 어떻게 알아차리고 어떻게 "
+            "관리하려고 할지도 설명해 보세요."
+        ),
+        "note": "Personalized from your character response to check thinking in English class.",
+    },
+    "q7": {
+        "state_targets": "WTC / Coping / Engagement",
+        "criteria_focus": (
+            "Generate a self question for English class that connects the student's character-behavior answer "
+            "to their own willingness to communicate, coping under difficulty, and participation."
+        ),
+        "fallback_en": (
+            "Based on your answer to {source_label} about {character_focus}, in a similar situation in English class, "
+            "what would you do? Would you speak, stay quiet, ask for help, prepare, practice more, or avoid it? Explain."
+        ),
+        "fallback_ko": (
+            "{character_focus}에 대한 {source_label} 답변을 바탕으로, 영어 수업에서 비슷한 상황이라면 "
+            "어떻게 행동할까요? 말하려고 하는지, 조용히 있는지, 도움을 요청하는지, 준비하거나 더 연습하는지, "
+            "또는 피하려고 하는지 설명해 보세요."
+        ),
+        "note": "Personalized from your character response to check behavior in English class.",
+    },
+    "q9": {
+        "state_targets": "Strategy Type / Strategy Quality",
+        "criteria_focus": (
+            "Generate a self question for English class that connects the student's character-strategy answer "
+            "to their own learning strategies. It should help reveal Oxford-based strategy type and quality "
+            "without naming the labels."
+        ),
+        "fallback_en": (
+            "Based on your answer to {source_label} about {character_focus}, what strategy would help you most "
+            "in a similar English-class situation? Explain what you would do and how it helps you."
+        ),
+        "fallback_ko": (
+            "{character_focus}에 대한 {source_label} 답변을 바탕으로, 영어 수업에서 비슷한 상황이라면 "
+            "어떤 전략이 가장 도움이 될까요? 무엇을 할 것인지와 그것이 어떻게 도움이 되는지 설명해 보세요."
+        ),
+        "note": "Personalized from your character response to check strategy in English class.",
+    },
+}
 
 QUESTIONNAIRE_DEFINITIONS = [
     {
@@ -500,6 +577,63 @@ def build_question_slot_instructions() -> str:
     return "\n".join(lines)
 
 
+def get_question_lookup(questionnaire: dict) -> dict:
+    return {question["id"]: question for question in get_all_questions(questionnaire)}
+
+
+def get_personalized_self_spec(question_id: str) -> dict:
+    return PERSONALIZED_SELF_QUESTION_SPECS.get(question_id, {})
+
+
+def normalize_single_prompt_payload(payload: dict) -> dict:
+    prompt = str(payload.get("prompt", "")).strip()
+    prompt_ko = str(payload.get("prompt_ko", "")).strip()
+
+    if not prompt or not prompt_ko:
+        raise ValueError("The model did not return both prompt and prompt_ko.")
+
+    return {
+        "prompt": prompt,
+        "prompt_ko": prompt_ko,
+    }
+
+
+def build_pending_self_prompt(questionnaire: dict, question: dict, source_question: dict) -> dict:
+    return {
+        "prompt": (
+            f"Finish {source_question['label']} first. Your personalized self question for English class "
+            "will appear here after you write at least 2 sentences."
+        ),
+        "prompt_ko": (
+            f"먼저 {source_question['label']}에 2문장 이상 답하면, 영어 수업과 연결된 맞춤형 self 질문이 "
+            "여기에 나타납니다."
+        ),
+        "prompt_source": "pending",
+        "prompt_note": (
+            f"Answer {source_question['label']} with at least {MIN_SENTENCES} sentences to unlock a linked follow-up question."
+        ),
+        "ready_for_answer": False,
+    }
+
+
+def build_rule_based_personalized_self_prompt(questionnaire: dict, question: dict, source_question: dict) -> dict:
+    spec = get_personalized_self_spec(question["id"])
+
+    return {
+        "prompt": spec["fallback_en"].format(
+            source_label=source_question["label"],
+            character_focus=questionnaire.get("character_focus", "the character"),
+        ),
+        "prompt_ko": spec["fallback_ko"].format(
+            source_label=source_question["label"],
+            character_focus=questionnaire.get("character_focus", "the character"),
+        ),
+        "prompt_source": "rule_based_personalized",
+        "prompt_note": spec["note"],
+        "ready_for_answer": True,
+    }
+
+
 def extract_json_object(text: str) -> dict:
     if not text:
         raise ValueError("The model returned an empty response.")
@@ -551,6 +685,107 @@ def normalize_prompt_map(payload: dict) -> dict:
         raise ValueError(f"Missing generated questions: {', '.join(missing)}")
 
     return normalized
+
+
+def generate_personalized_self_prompt_with_openai(
+    questionnaire: dict,
+    question: dict,
+    source_question: dict,
+    source_answer: str,
+    api_key: str,
+    model: str,
+) -> dict:
+    client = get_openai_client(api_key)
+    spec = get_personalized_self_spec(question["id"])
+
+    system_prompt = """
+You generate one personalized self-reflection question for an English education diagnostic app.
+Return valid JSON only.
+The question must be clearly connected to the student's answer about the character, but it must move into the student's own experience in English class.
+Use simple learner-friendly English.
+Do not mention technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or Oxford strategy type.
+Make the Korean translation natural and faithful.
+"""
+
+    user_prompt = f"""
+Passage title: {questionnaire['story_title']}
+Passage:
+{questionnaire['text']}
+
+Current layer: {question['layer']}
+State targets: {spec.get('state_targets', '')}
+Instruction:
+{spec.get('criteria_focus', '')}
+
+Character question:
+{source_question['prompt']}
+
+Student's answer to the character question:
+{source_answer}
+
+Create one self question for English class that:
+1. Feels meaningfully linked to the student's answer above.
+2. Checks the student's state in English learning.
+3. Sounds natural for a student questionnaire.
+4. Uses 1 or 2 short sentences.
+5. Does not mention the passage characters by name unless that linkage is very short and natural.
+
+Return JSON only:
+{{
+  "prompt": "....",
+  "prompt_ko": "...."
+}}
+"""
+
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt.strip()},
+            {"role": "user", "content": user_prompt.strip()},
+        ],
+    )
+
+    response_text = completion.choices[0].message.content or ""
+    payload = extract_json_object(response_text)
+    normalized = normalize_single_prompt_payload(payload)
+    normalized["prompt_source"] = "openai_personalized"
+    normalized["prompt_note"] = spec["note"]
+    normalized["ready_for_answer"] = True
+    return normalized
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def build_personalized_self_prompt(
+    questionnaire_json: str,
+    question_json: str,
+    source_question_json: str,
+    source_answer: str,
+    api_key: str,
+    model: str,
+) -> dict:
+    questionnaire = json.loads(questionnaire_json)
+    question = json.loads(question_json)
+    source_question = json.loads(source_question_json)
+
+    if sentence_count(source_answer) < MIN_SENTENCES:
+        return build_pending_self_prompt(questionnaire, question, source_question)
+
+    fallback = build_rule_based_personalized_self_prompt(questionnaire, question, source_question)
+
+    if not api_key:
+        return fallback
+
+    try:
+        return generate_personalized_self_prompt_with_openai(
+            questionnaire=questionnaire,
+            question=question,
+            source_question=source_question,
+            source_answer=source_answer,
+            api_key=api_key,
+            model=model,
+        )
+    except Exception:
+        return fallback
 
 
 def build_rule_based_prompt_map(questionnaire: dict) -> dict:
@@ -745,6 +980,38 @@ def build_questionnaires(question_generation_config: dict) -> list:
         questionnaires.append(questionnaire)
 
     return questionnaires
+
+
+def materialize_questionnaire_for_answers(
+    questionnaire: dict,
+    answers: dict,
+    question_generation_config: dict,
+) -> dict:
+    materialized = deepcopy(questionnaire)
+    question_lookup = get_question_lookup(materialized)
+    default_prompt_source = materialized.get("question_source", "rule_based")
+
+    for question in get_all_questions(materialized):
+        question["prompt_source"] = default_prompt_source
+        question["prompt_note"] = ""
+        question["ready_for_answer"] = True
+
+        if question["type"] != "Self" or not question.get("depends_on"):
+            continue
+
+        source_question = question_lookup[question["depends_on"]]
+        source_answer = answers.get(source_question["id"], "").strip()
+        personalized = build_personalized_self_prompt(
+            questionnaire_json=json.dumps(questionnaire, ensure_ascii=False, sort_keys=True),
+            question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
+            source_question_json=json.dumps(source_question, ensure_ascii=False, sort_keys=True),
+            source_answer=source_answer,
+            api_key=question_generation_config["api_key"],
+            model=question_generation_config["model"],
+        )
+        question.update(personalized)
+
+    return materialized
 
 
 def get_all_questions(questionnaire: dict) -> list:
@@ -1215,6 +1482,8 @@ def build_response_row(
         row[f"{question['id']}_type"] = question["type"]
         row[f"{question['id']}_prompt"] = question["prompt"]
         row[f"{question['id']}_prompt_ko"] = question["prompt_ko"]
+        row[f"{question['id']}_prompt_source"] = question.get("prompt_source", questionnaire.get("question_source", "rule_based"))
+        row[f"{question['id']}_prompt_note"] = question.get("prompt_note", "")
         row[f"{question['id']}_response"] = answer
         row[f"{question['id']}_word_count"] = word_count(answer)
         row[f"{question['id']}_sentence_count"] = sentence_count(answer)
@@ -1345,6 +1614,183 @@ def initialize_questionnaire_widgets(questionnaire: dict):
             st.session_state[completion_state_key] = sentence_count(st.session_state[key]) >= MIN_SENTENCES
 
 
+def inject_custom_styles():
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background:
+                radial-gradient(circle at top left, rgba(241, 244, 255, 0.95), transparent 38%),
+                linear-gradient(180deg, #f7f3ea 0%, #fbfcfe 42%, #f5f8fc 100%);
+        }
+
+        .section-title {
+            margin-top: 1.1rem;
+            margin-bottom: 0.25rem;
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #17263a;
+            letter-spacing: -0.02em;
+        }
+
+        .section-subtitle {
+            margin-bottom: 0.75rem;
+            color: #53657a;
+            font-size: 0.94rem;
+        }
+
+        .question-card {
+            border-radius: 20px;
+            padding: 1rem 1.05rem 0.95rem 1.05rem;
+            margin: 0.7rem 0 0.45rem 0;
+            border: 1px solid #d5dfeb;
+            box-shadow: 0 14px 30px rgba(21, 43, 68, 0.08);
+        }
+
+        .question-card-character {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            border-left: 7px solid #2f6fed;
+        }
+
+        .question-card-self {
+            background: linear-gradient(180deg, #fffef8 0%, #fff8ea 100%);
+            border-left: 7px solid #d97706;
+        }
+
+        .question-card-pending {
+            background: linear-gradient(180deg, #f8fafc 0%, #eef4f8 100%);
+            border-left-color: #7b8da2;
+        }
+
+        .question-top {
+            display: flex;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 0.7rem;
+        }
+
+        .question-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.28rem 0.62rem;
+            border-radius: 999px;
+            font-size: 0.73rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .question-chip-label {
+            background: #12263f;
+            color: #ffffff;
+        }
+
+        .question-chip-layer {
+            background: #dce9ff;
+            color: #1b4fb8;
+        }
+
+        .question-chip-type {
+            background: #fff0d6;
+            color: #9a5a00;
+        }
+
+        .question-prompt {
+            font-size: 1.18rem;
+            line-height: 1.58;
+            font-weight: 800;
+            color: #13263b;
+            margin-bottom: 0.65rem;
+        }
+
+        .question-ko {
+            font-size: 0.98rem;
+            line-height: 1.62;
+            color: #4d6177;
+            margin-bottom: 0.55rem;
+        }
+
+        .question-note {
+            font-size: 0.9rem;
+            line-height: 1.55;
+            color: #6a4b0a;
+            background: rgba(255, 244, 214, 0.7);
+            border-radius: 12px;
+            padding: 0.6rem 0.75rem;
+            border: 1px solid rgba(217, 119, 6, 0.18);
+        }
+
+        .question-note-muted {
+            color: #56697d;
+            background: rgba(235, 242, 248, 0.8);
+            border: 1px solid rgba(123, 141, 162, 0.18);
+        }
+
+        .stTextArea textarea {
+            font-size: 1.02rem !important;
+            line-height: 1.72 !important;
+            background: #fffdf8 !important;
+            border-radius: 16px !important;
+            border: 1.5px solid #c8d5e4 !important;
+            box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.03);
+        }
+
+        .stTextArea textarea:focus {
+            border-color: #2f6fed !important;
+            box-shadow: 0 0 0 0.18rem rgba(47, 111, 237, 0.14) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_section_header(section: dict):
+    st.markdown(
+        (
+            f"<div class='section-title'>{html.escape(section['title'])}</div>"
+            f"<div class='section-subtitle'>{html.escape(section['title_ko'])}</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_question_card(question: dict):
+    card_classes = ["question-card"]
+    if question["type"] == "Self":
+        card_classes.append("question-card-self")
+    else:
+        card_classes.append("question-card-character")
+    if not question.get("ready_for_answer", True):
+        card_classes.append("question-card-pending")
+
+    note_text = question.get("prompt_note", "").strip()
+    note_class = "question-note"
+    if note_text and question.get("prompt_source") == "pending":
+        note_class = "question-note question-note-muted"
+
+    note_html = ""
+    if note_text:
+        note_html = f"<div class='{note_class}'>{html.escape(note_text)}</div>"
+
+    st.markdown(
+        (
+            f"<div class='{' '.join(card_classes)}'>"
+            "<div class='question-top'>"
+            f"<span class='question-chip question-chip-label'>{html.escape(question['label'])}</span>"
+            f"<span class='question-chip question-chip-layer'>{html.escape(question['layer'])}</span>"
+            f"<span class='question-chip question-chip-type'>{html.escape(question['type'])}</span>"
+            "</div>"
+            f"<div class='question-prompt'>{html.escape(question['prompt'])}</div>"
+            f"<div class='question-ko'>한국어 해석: {html.escape(question['prompt_ko'])}</div>"
+            f"{note_html}"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 # -----------------------------
 # Session defaults
 # -----------------------------
@@ -1355,6 +1801,8 @@ question_generation_config = get_question_generation_config()
 
 with st.spinner("Preparing passage-based questions..."):
     QUESTIONNAIRES = build_questionnaires(question_generation_config)
+
+inject_custom_styles()
 
 
 # -----------------------------
@@ -1385,12 +1833,22 @@ if st.session_state.current_questionnaire_index >= len(QUESTIONNAIRES):
     st.session_state.current_questionnaire_index = 0
 
 current_index = st.session_state.current_questionnaire_index
-current_questionnaire = QUESTIONNAIRES[current_index]
-initialize_questionnaire_widgets(current_questionnaire)
+current_questionnaire_base = QUESTIONNAIRES[current_index]
+initialize_questionnaire_widgets(current_questionnaire_base)
 
 if current_index > 0 and not st.session_state.student_name_value:
     st.session_state.current_questionnaire_index = 0
     st.rerun()
+
+current_answers_snapshot = {
+    question["id"]: st.session_state.get(widget_key(current_questionnaire_base["id"], question["id"]), "").strip()
+    for question in get_all_questions(current_questionnaire_base)
+}
+current_questionnaire = materialize_questionnaire_for_answers(
+    questionnaire=current_questionnaire_base,
+    answers=current_answers_snapshot,
+    question_generation_config=question_generation_config,
+)
 
 st.caption(f"Step {current_index + 1} of {len(QUESTIONNAIRES)}")
 st.progress((current_index + 1) / len(QUESTIONNAIRES))
@@ -1407,17 +1865,20 @@ else:
         f"Current local files: `{RESPONSES_FILE}` and `{EVALUATIONS_FILE}`"
     )
 
-if current_questionnaire.get("question_source") == "openai":
+if question_generation_config["enabled"]:
     st.success(
-        "Question mode: Passage-based AI generation is active.\n\n"
-        f"Model: `{current_questionnaire.get('question_model', DEFAULT_QUESTION_MODEL)}`"
+        "Question mode: AI-personalized self follow-up questions are active.\n\n"
+        f"Model: `{question_generation_config.get('model', DEFAULT_QUESTION_MODEL)}`"
     )
 else:
     st.info(
-        "Question mode: Built-in fallback questions are active.\n\n"
-        "Add `OPENAI_API_KEY` or `[openai].api_key` in Streamlit secrets to generate the questions from the passage with `gpt-5-mini`."
+        "Question mode: Built-in character questions and template-based self follow-up questions are active.\n\n"
+        "Add `OPENAI_API_KEY` or `[openai].api_key` in Streamlit secrets to turn the self follow-up questions into AI-personalized prompts."
     )
-st.caption(current_questionnaire.get("question_generation_note", ""))
+st.caption(f"Base passage-question status: {current_questionnaire_base.get('question_generation_note', '')}")
+st.caption(
+    f"Self questions refresh after you complete the character question above them with at least {MIN_SENTENCES} sentences."
+)
 
 st.info(
     "This activity checks how students respond to a CEFR-level story and a literature passage. "
@@ -1478,24 +1939,29 @@ completed_questions = 0
 total_questions = len(get_all_questions(current_questionnaire))
 
 for section in current_questionnaire["sections"]:
-    st.markdown(f"### {section['title']}")
+    render_section_header(section)
 
     for question in section["questions"]:
         question_key = widget_key(current_questionnaire["id"], question["id"])
-        st.caption(f"{question['layer']} | {question['type']}")
+        render_question_card(question)
         answer = st.text_area(
             f"{question['label']}. {question['prompt']}",
             key=question_key,
-            height=140,
-            placeholder="Write at least 2 sentences in English. Use a period (.) at the end of each sentence.",
+            label_visibility="collapsed",
+            height=170,
+            disabled=not question.get("ready_for_answer", True),
+            placeholder=(
+                "Write at least 2 sentences in English. Use a period (.) at the end of each sentence."
+                if question.get("ready_for_answer", True)
+                else f"Finish {question.get('depends_on', 'the previous question')} first to unlock this personalized self question."
+            ),
             on_change=update_question_completion,
             args=(current_questionnaire["id"], question["id"]),
         )
         current_answers[question["id"]] = answer.strip()
-        st.caption(f"한국어 해석: {question['prompt_ko']}")
 
         counted_sentences = sentence_count(answer)
-        is_complete = counted_sentences >= MIN_SENTENCES
+        is_complete = question.get("ready_for_answer", True) and counted_sentences >= MIN_SENTENCES
         if is_complete:
             completed_questions += 1
 
@@ -1511,12 +1977,20 @@ for section in current_questionnaire["sections"]:
                     st.markdown(f":green[Completed. Counted sentences: {counted_sentences}.]")
                 else:
                     st.caption(
-                        f"Counted sentences: {counted_sentences}. "
-                        "Write at least 2 sentences and use a period (.) after each sentence."
+                        (
+                            f"Counted sentences: {counted_sentences}. "
+                            "Write at least 2 sentences and use a period (.) after each sentence."
+                            if question.get("ready_for_answer", True)
+                            else f"This answer box will open after {question.get('depends_on', 'the previous question')} is completed."
+                        )
                     )
             else:
                 st.caption(
-                    "Counted sentences: 0. Start writing in English and end each sentence with a period (.)."
+                    (
+                        "Counted sentences: 0. Start writing in English and end each sentence with a period (.)."
+                        if question.get("ready_for_answer", True)
+                        else f"Waiting for {question.get('depends_on', 'the previous question')} so this personalized follow-up can be generated."
+                    )
                 )
 
 st.markdown("### Completion")
@@ -1579,12 +2053,17 @@ if next_clicked or submit_clicked:
 
         for step_order, questionnaire in enumerate(QUESTIONNAIRES, start=1):
             answers = st.session_state.saved_questionnaire_answers.get(questionnaire["id"], {})
+            materialized_questionnaire = materialize_questionnaire_for_answers(
+                questionnaire=questionnaire,
+                answers=answers,
+                question_generation_config=question_generation_config,
+            )
             response_rows.append(
                 build_response_row(
                     submission_id=submission_id,
                     student_name=st.session_state.student_name_value,
                     participant_id=st.session_state.participant_id_value,
-                    questionnaire=questionnaire,
+                    questionnaire=materialized_questionnaire,
                     step_order=step_order,
                     answers=answers,
                 )
@@ -1594,7 +2073,7 @@ if next_clicked or submit_clicked:
                     submission_id=submission_id,
                     student_name=st.session_state.student_name_value,
                     participant_id=st.session_state.participant_id_value,
-                    questionnaire=questionnaire,
+                    questionnaire=materialized_questionnaire,
                     step_order=step_order,
                     answers=answers,
                 )
