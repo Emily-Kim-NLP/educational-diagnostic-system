@@ -1,11 +1,14 @@
+import json
 import os
 import re
+from copy import deepcopy
 from datetime import datetime
 from uuid import uuid4
 
 import gspread
 import pandas as pd
 import streamlit as st
+from openai import OpenAI
 
 
 # -----------------------------
@@ -31,30 +34,33 @@ RESPONSES_FILE = os.path.join(RESPONSES_DIR, "questionnaire_responses.csv")
 EVALUATIONS_FILE = os.path.join(EVALUATIONS_DIR, "state_evaluations.csv")
 DEFAULT_RESPONSES_WORKSHEET = "questionnaire_responses"
 DEFAULT_EVALUATIONS_WORKSHEET = "state_evaluations"
+DEFAULT_QUESTION_MODEL = "gpt-5-mini"
 
 MIN_SENTENCES = 2
 RECOMMENDED_SENTENCES = 3
 
 CEFR_STORY_TEXT = """
-**Strong Feelings and Physical Closeness**
+**Frank's Last Case**
 
-Kate and Michael were sitting on the sofa watching a film.
-His knee was very close to her leg, and she could feel her heart beating fast.
-She could not stop thinking about him.
-Her face felt hot and she knew she was blushing.
-When he moved his hand away, she suddenly felt cold and a little empty.
-Then he touched her hand again, and she felt happy and warm.
+Frank was a police officer near retirement.
+He felt unhappy because he did not have enough money for his future.
+One day, he heard about a plan to steal a famous diamond.
+Instead of stopping the criminals, Frank made a different plan.
+He decided to let them steal the diamond and catch them later.
+When the police stopped the criminals, Frank secretly changed the real diamond with a fake one.
+In the end, the criminals were arrested, but Frank kept the real diamond for himself.
 """
 
 CEFR_STORY_TEXT_KO = """
-**강한 감정과 신체적 가까움**
+**Frank의 마지막 사건**
 
-Kate와 Michael은 소파에 앉아 영화를 보고 있었습니다.
-Michael의 무릎은 Kate의 다리에 아주 가까이 있었고, Kate는 심장이 빠르게 뛰는 것을 느꼈습니다.
-Kate는 Michael 생각을 멈출 수 없었습니다.
-Kate의 얼굴은 뜨거워졌고, 자신이 얼굴을 붉히고 있다는 것도 알았습니다.
-Michael이 손을 떼자 Kate는 갑자기 차갑고 조금 허전한 기분이 들었습니다.
-그런데 Michael이 다시 Kate의 손을 만지자 Kate는 행복하고 따뜻한 기분이 들었습니다.
+Frank는 은퇴를 앞둔 경찰관이었습니다.
+그는 미래를 위한 돈이 충분하지 않아서 불행했습니다.
+어느 날 그는 유명한 다이아몬드를 훔치려는 계획에 대해 듣게 되었습니다.
+범죄자들을 막는 대신, Frank는 다른 계획을 세웠습니다.
+그는 그들이 다이아몬드를 훔치도록 내버려 둔 뒤 나중에 그들을 잡기로 했습니다.
+경찰이 범죄자들을 막았을 때, Frank는 진짜 다이아몬드를 가짜와 몰래 바꾸었습니다.
+결국 범죄자들은 체포되었지만, Frank는 진짜 다이아몬드를 자신이 차지했습니다.
 """
 
 LITERATURE_TEXT = """
@@ -79,12 +85,166 @@ Elizabeth는 그 말을 듣고 상처를 받고 조금 화가 났습니다.
 Elizabeth는 Darcy가 무례하고 친절하지 않다고 생각했습니다.
 """
 
-QUESTIONNAIRES = [
+QUESTION_SECTION_BLUEPRINTS = [
+    {
+        "title": "Part 1. Understanding",
+        "title_ko": "1부. 이해",
+        "questions": [
+            {
+                "id": "q1",
+                "label": "Q1",
+                "layer": "Understanding",
+                "type": "Character",
+                "question_goal": "Ask the student to explain the key event, conflict, or situation from the passage in their own words.",
+            }
+        ],
+    },
+    {
+        "title": "Part 2. Emotion",
+        "title_ko": "2부. 감정",
+        "questions": [
+            {
+                "id": "q2",
+                "label": "Q2",
+                "layer": "Emotion",
+                "type": "Character",
+                "question_goal": "Ask how the main character feels in the passage and why.",
+            },
+            {
+                "id": "q3",
+                "label": "Q3",
+                "layer": "Emotion",
+                "type": "Self",
+                "question_goal": "Ask how the student would feel in a similar English-class situation.",
+                "criteria_focus": "Target FLA and FLE without naming the labels. Encourage feelings such as nervous, worried, afraid, comfortable, relaxed, interested, happy, or enjoying the class.",
+            },
+        ],
+    },
+    {
+        "title": "Part 3. Cognition",
+        "title_ko": "3부. 생각",
+        "questions": [
+            {
+                "id": "q4",
+                "label": "Q4",
+                "layer": "Cognition",
+                "type": "Character",
+                "question_goal": "Ask what the main character might think in that moment.",
+            },
+            {
+                "id": "q5",
+                "label": "Q5",
+                "layer": "Cognition",
+                "type": "Self",
+                "question_goal": "Ask what the student would think in a similar English-class situation.",
+                "criteria_focus": "Target self-efficacy and metacognition without naming the labels. Encourage reflection on ability, confidence, noticing problems, and managing or improving learning.",
+            },
+        ],
+    },
+    {
+        "title": "Part 4. Behavior",
+        "title_ko": "4부. 행동",
+        "questions": [
+            {
+                "id": "q6",
+                "label": "Q6",
+                "layer": "Behavior",
+                "type": "Character",
+                "question_goal": "Ask what the main character could do in that situation.",
+            },
+            {
+                "id": "q7",
+                "label": "Q7",
+                "layer": "Behavior",
+                "type": "Self",
+                "question_goal": "Ask what the student would do in a similar English-class situation.",
+                "criteria_focus": "Target WTC, coping, and engagement without naming the labels. Encourage reflection on speaking, staying quiet, asking for help, preparing, practicing, avoiding, or participating.",
+            },
+        ],
+    },
+    {
+        "title": "Part 5. Strategy",
+        "title_ko": "5부. 전략",
+        "questions": [
+            {
+                "id": "q8",
+                "label": "Q8",
+                "layer": "Strategy",
+                "type": "Character",
+                "question_goal": "Ask what the best way is for the main character to handle the situation and why.",
+            },
+            {
+                "id": "q9",
+                "label": "Q9",
+                "layer": "Strategy",
+                "type": "Self",
+                "question_goal": "Ask what helps the student most in a similar English-class situation.",
+                "criteria_focus": "Target Oxford-based strategy type and quality without naming the labels. Encourage strategy examples such as practice, planning, calming down, asking others, guessing, or using simple words.",
+            },
+        ],
+    },
+]
+
+QUESTION_GENERATION_CRITERIA = """
+Layer and evaluation targets:
+
+Emotion
+- FLA (Foreign Language Anxiety)
+  High: strong anxiety expressions such as nervous, afraid, worry, avoid speaking.
+  Mid: anxiety plus control expressions such as nervous but try, worried but prepare.
+  Low: almost no anxiety such as comfortable, relaxed.
+- FLE (Foreign Language Enjoyment)
+  High: clear enjoyment or interest such as enjoy, fun, interesting, happy.
+  Mid: mixed positive and neutral such as okay, sometimes enjoyable.
+  Low: low interest or negative response such as boring, do not like.
+
+Cognition
+- Self-efficacy
+  High: confidence about performance such as I can speak well, I am confident.
+  Mid: limited confidence such as I can, but..., simple English only.
+  Low: low belief in performance such as I cannot speak, I will make mistakes.
+- Metacognition
+  High: self-awareness plus regulation such as I know my problem and try to fix it.
+  Mid: partial awareness such as I know I am weak, but no clear action.
+  Low: little or no reflection.
+
+Behavior
+- WTC (Willingness to Communicate)
+  High: active speaking such as I try to speak, I talk often.
+  Mid: situation-dependent such as sometimes speak, depends.
+  Low: avoidance such as stay quiet, do not speak.
+- Coping
+  Active: problem-solving behaviors such as practice, try, ask, prepare.
+  Mixed: trying plus avoidance.
+  Avoidant: mainly avoidance such as avoid, give up, stay silent.
+- Engagement
+  High: active participation such as participate, ask questions, interact.
+  Mid: limited participation such as listen but rarely speak.
+  Low: non-participation such as passive, no interaction.
+
+Strategy
+- Strategy Type
+  Cognitive: practice, repetition, note-taking.
+  Metacognitive: planning, monitoring, self-check.
+  Affective: calming, positive thinking, anxiety control.
+  Social: asking, interacting, peer learning.
+  Compensation: guessing, using gestures, using simple words.
+  Mixed: using two or more strategy types together.
+- Strategy Quality
+  Effective: strategy matches the goal and shows regulation.
+  Limited: simple or repetitive strategy such as only memorize.
+  Avoidant: mainly avoidance.
+"""
+
+QUESTIONNAIRE_DEFINITIONS = [
     {
         "id": "cefr_story",
         "page_title": "CEFR Story",
         "page_title_ko": "CEFR 스토리",
-        "story_title": "Love me, love me not",
+        "story_title": "Frank's last case",
+        "character_focus": "Frank",
+        "relationship_focus": "Frank and the criminals",
+        "relationship_focus_ko": "Frank와 범죄자들",
         "intro": (
             "Complete the CEFR story questionnaire first. After you finish all 9 questions, "
             "click Next to move to the literature questionnaire."
@@ -95,116 +255,15 @@ QUESTIONNAIRES = [
         ),
         "text": CEFR_STORY_TEXT,
         "text_ko": CEFR_STORY_TEXT_KO,
-        "sections": [
-            {
-                "title": "Part 1. Understanding",
-                "title_ko": "1부. 이해",
-                "questions": [
-                    {
-                        "id": "q1",
-                        "label": "Q1",
-                        "layer": "Understanding",
-                        "type": "Character",
-                        "prompt": "What is happening between Kate and Michael? Explain in your own words.",
-                        "prompt_ko": "Kate와 Michael 사이에 무슨 일이 일어나고 있나요? 자신의 말로 설명해 보세요.",
-                    }
-                ],
-            },
-            {
-                "title": "Part 2. Emotion",
-                "title_ko": "2부. 감정",
-                "questions": [
-                    {
-                        "id": "q2",
-                        "label": "Q2",
-                        "layer": "Emotion",
-                        "type": "Character",
-                        "prompt": "How does Kate feel in this situation? Why?",
-                        "prompt_ko": "이 상황에서 Kate는 어떻게 느끼나요? 왜 그렇게 느끼나요?",
-                    },
-                    {
-                        "id": "q3",
-                        "label": "Q3",
-                        "layer": "Emotion",
-                        "type": "Self",
-                        "prompt": "When you feel like Kate in this situation, how do you feel in English class? Why?",
-                        "prompt_ko": "이 상황에서 Kate처럼 느낄 때, 영어 수업에서는 어떤 기분이 드나요? 왜 그런가요?",
-                    },
-                ],
-            },
-            {
-                "title": "Part 3. Cognition",
-                "title_ko": "3부. 생각",
-                "questions": [
-                    {
-                        "id": "q4",
-                        "label": "Q4",
-                        "layer": "Cognition",
-                        "type": "Character",
-                        "prompt": "What might Kate think in this moment?",
-                        "prompt_ko": "이 순간 Kate는 무슨 생각을 할까요?",
-                    },
-                    {
-                        "id": "q5",
-                        "label": "Q5",
-                        "layer": "Cognition",
-                        "type": "Self",
-                        "prompt": "When you think like Kate in this situation, what do you usually think in English class?",
-                        "prompt_ko": "이 상황에서 Kate처럼 생각할 때, 영어 수업에서는 보통 어떤 생각이 드나요?",
-                    },
-                ],
-            },
-            {
-                "title": "Part 4. Behavior",
-                "title_ko": "4부. 행동",
-                "questions": [
-                    {
-                        "id": "q6",
-                        "label": "Q6",
-                        "layer": "Behavior",
-                        "type": "Character",
-                        "prompt": "What could Kate do in this situation?",
-                        "prompt_ko": "이 상황에서 Kate는 무엇을 할 수 있을까요?",
-                    },
-                    {
-                        "id": "q7",
-                        "label": "Q7",
-                        "layer": "Behavior",
-                        "type": "Self",
-                        "prompt": "When you act like Kate in this situation, what do you usually do in English class?",
-                        "prompt_ko": "이 상황에서 Kate처럼 행동할 때, 영어 수업에서는 보통 어떻게 행동하나요?",
-                    },
-                ],
-            },
-            {
-                "title": "Part 5. Strategy",
-                "title_ko": "5부. 전략",
-                "questions": [
-                    {
-                        "id": "q8",
-                        "label": "Q8",
-                        "layer": "Strategy",
-                        "type": "Character",
-                        "prompt": "What is the best way for Kate to handle this situation? Why?",
-                        "prompt_ko": "Kate가 이 상황을 가장 잘 다루는 방법은 무엇일까요? 왜 그렇게 생각하나요?",
-                    },
-                    {
-                        "id": "q9",
-                        "label": "Q9",
-                        "layer": "Strategy",
-                        "type": "Self",
-                        "prompt": "When you handle the situation like Kate, what helps you the most in English class?",
-                        "prompt_ko": "Kate와 비슷한 상황을 다룰 때, 영어 수업에서 가장 도움이 되는 것은 무엇인가요?",
-                    },
-                ],
-            },
-        ],
     },
     {
         "id": "literature",
         "page_title": "Literature",
         "page_title_ko": "문학",
         "story_title": "Jane Austen - Pride and Prejudice",
+        "character_focus": "Elizabeth",
+        "relationship_focus": "Elizabeth and Mr. Darcy",
+        "relationship_focus_ko": "Elizabeth와 Mr. Darcy",
         "intro": (
             "This is the second questionnaire. Read the literature passage and answer all 9 questions "
             "before submitting the full response."
@@ -215,110 +274,6 @@ QUESTIONNAIRES = [
         ),
         "text": LITERATURE_TEXT,
         "text_ko": LITERATURE_TEXT_KO,
-        "sections": [
-            {
-                "title": "Part 1. Understanding",
-                "title_ko": "1부. 이해",
-                "questions": [
-                    {
-                        "id": "q1",
-                        "label": "Q1",
-                        "layer": "Understanding",
-                        "type": "Character",
-                        "prompt": "What happened between Elizabeth and Mr. Darcy? Explain in your own words.",
-                        "prompt_ko": "Elizabeth와 Mr. Darcy 사이에 무슨 일이 있었나요? 자신의 말로 설명해 보세요.",
-                    }
-                ],
-            },
-            {
-                "title": "Part 2. Emotion",
-                "title_ko": "2부. 감정",
-                "questions": [
-                    {
-                        "id": "q2",
-                        "label": "Q2",
-                        "layer": "Emotion",
-                        "type": "Character",
-                        "prompt": "How does Elizabeth feel in this situation? Why?",
-                        "prompt_ko": "이 상황에서 Elizabeth는 어떻게 느끼나요? 왜 그렇게 느끼나요?",
-                    },
-                    {
-                        "id": "q3",
-                        "label": "Q3",
-                        "layer": "Emotion",
-                        "type": "Self",
-                        "prompt": "When you feel like Elizabeth, how do you feel in English class? Why?",
-                        "prompt_ko": "Elizabeth처럼 느낄 때, 영어 수업에서는 어떤 기분이 드나요? 왜 그런가요?",
-                    },
-                ],
-            },
-            {
-                "title": "Part 3. Cognition",
-                "title_ko": "3부. 생각",
-                "questions": [
-                    {
-                        "id": "q4",
-                        "label": "Q4",
-                        "layer": "Cognition",
-                        "type": "Character",
-                        "prompt": "What might Elizabeth think in this moment?",
-                        "prompt_ko": "이 순간 Elizabeth는 무슨 생각을 할까요?",
-                    },
-                    {
-                        "id": "q5",
-                        "label": "Q5",
-                        "layer": "Cognition",
-                        "type": "Self",
-                        "prompt": "When you think like Elizabeth, what do you usually think in English class?",
-                        "prompt_ko": "Elizabeth처럼 생각할 때, 영어 수업에서는 보통 어떤 생각이 드나요?",
-                    },
-                ],
-            },
-            {
-                "title": "Part 4. Behavior",
-                "title_ko": "4부. 행동",
-                "questions": [
-                    {
-                        "id": "q6",
-                        "label": "Q6",
-                        "layer": "Behavior",
-                        "type": "Character",
-                        "prompt": "What could Elizabeth do in this situation?",
-                        "prompt_ko": "이 상황에서 Elizabeth는 무엇을 할 수 있을까요?",
-                    },
-                    {
-                        "id": "q7",
-                        "label": "Q7",
-                        "layer": "Behavior",
-                        "type": "Self",
-                        "prompt": "When you act like Elizabeth, what do you usually do in English class?",
-                        "prompt_ko": "Elizabeth처럼 행동할 때, 영어 수업에서는 보통 어떻게 행동하나요?",
-                    },
-                ],
-            },
-            {
-                "title": "Part 5. Strategy",
-                "title_ko": "5부. 전략",
-                "questions": [
-                    {
-                        "id": "q8",
-                        "label": "Q8",
-                        "layer": "Strategy",
-                        "type": "Character",
-                        "prompt": "What is the best way for Elizabeth to handle this situation? Why?",
-                        "prompt_ko": "Elizabeth가 이 상황을 가장 잘 다루는 방법은 무엇일까요? 왜 그렇게 생각하나요?",
-                    },
-                    {
-                        "id": "q9",
-                        "label": "Q9",
-                        "layer": "Strategy",
-                        "type": "Self",
-                        "prompt": "When you handle this situation, what helps you the most in English class?",
-                        "prompt_ko": "이와 비슷한 상황을 다룰 때, 영어 수업에서 가장 도움이 되는 것은 무엇인가요?",
-                    },
-                ],
-            },
-        ],
     },
 ]
 
@@ -415,9 +370,45 @@ def get_google_sheets_config() -> dict:
     }
 
 
+def get_question_generation_config() -> dict:
+    api_key = ""
+    model = DEFAULT_QUESTION_MODEL
+
+    if "openai" in st.secrets:
+        openai_settings = dict(st.secrets["openai"])
+        api_key = str(openai_settings.get("api_key", "")).strip()
+        model = str(
+            openai_settings.get("question_model")
+            or openai_settings.get("model")
+            or model
+        ).strip()
+
+    if not api_key and "OPENAI_API_KEY" in st.secrets:
+        api_key = str(st.secrets["OPENAI_API_KEY"]).strip()
+
+    env_api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    env_model = os.getenv("OPENAI_QUESTION_MODEL", "").strip()
+
+    if env_api_key and not api_key:
+        api_key = env_api_key
+    if env_model:
+        model = env_model
+
+    return {
+        "enabled": bool(api_key),
+        "api_key": api_key,
+        "model": model or DEFAULT_QUESTION_MODEL,
+    }
+
+
 @st.cache_resource
 def get_gspread_client(service_account_info: dict):
     return gspread.service_account_from_dict(service_account_info)
+
+
+@st.cache_resource
+def get_openai_client(api_key: str):
+    return OpenAI(api_key=api_key)
 
 
 def get_google_spreadsheet(config: dict):
@@ -486,6 +477,274 @@ def save_rows(rows: list, local_file_path: str, google_worksheet_name: str):
         "backend": "local_csv",
         "file_path": local_file_path,
     }
+
+
+def get_question_slots() -> list:
+    return [
+        question
+        for section in QUESTION_SECTION_BLUEPRINTS
+        for question in section["questions"]
+    ]
+
+
+def build_question_slot_instructions() -> str:
+    lines = []
+    for question in get_question_slots():
+        line = (
+            f"- {question['id']} | layer={question['layer']} | type={question['type']} | "
+            f"goal={question['question_goal']}"
+        )
+        if question.get("criteria_focus"):
+            line += f" | criteria={question['criteria_focus']}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def extract_json_object(text: str) -> dict:
+    if not text:
+        raise ValueError("The model returned an empty response.")
+
+    code_block_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
+    if code_block_match:
+        text = code_block_match.group(1)
+
+    start_index = text.find("{")
+    end_index = text.rfind("}")
+
+    if start_index < 0 or end_index < 0 or end_index <= start_index:
+        raise ValueError("No JSON object was found in the model response.")
+
+    return json.loads(text[start_index : end_index + 1])
+
+
+def normalize_prompt_map(payload: dict) -> dict:
+    questions_payload = payload.get("questions", [])
+
+    if isinstance(questions_payload, dict):
+        items = []
+        for question_id, value in questions_payload.items():
+            if isinstance(value, dict):
+                items.append({"id": question_id, **value})
+    elif isinstance(questions_payload, list):
+        items = questions_payload
+    else:
+        items = []
+
+    normalized = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        question_id = str(item.get("id", "")).strip()
+        prompt = str(item.get("prompt", "")).strip()
+        prompt_ko = str(item.get("prompt_ko", "")).strip()
+
+        if question_id and prompt and prompt_ko:
+            normalized[question_id] = {
+                "prompt": prompt,
+                "prompt_ko": prompt_ko,
+            }
+
+    expected_question_ids = {question["id"] for question in get_question_slots()}
+    if set(normalized.keys()) != expected_question_ids:
+        missing = sorted(expected_question_ids - set(normalized.keys()))
+        raise ValueError(f"Missing generated questions: {', '.join(missing)}")
+
+    return normalized
+
+
+def build_rule_based_prompt_map(questionnaire: dict) -> dict:
+    character_focus = questionnaire.get("character_focus", "the main character")
+    relationship_focus = questionnaire.get("relationship_focus", character_focus)
+    relationship_focus_ko = questionnaire.get("relationship_focus_ko", relationship_focus)
+
+    return {
+        "q1": {
+            "prompt": f"What happens between {relationship_focus} in this passage? Explain in your own words.",
+            "prompt_ko": f"이 지문에서 {relationship_focus_ko} 사이에 어떤 일이 일어나나요? 자신의 말로 설명해 보세요.",
+        },
+        "q2": {
+            "prompt": f"How does {character_focus} feel in this situation? Why?",
+            "prompt_ko": f"이 상황에서 {character_focus}는 어떻게 느끼나요? 왜 그렇게 느끼나요?",
+        },
+        "q3": {
+            "prompt": (
+                "If you were in a similar situation in English class, how would you feel? "
+                "Explain whether you would feel nervous, comfortable, interested, or something else, and why."
+            ),
+            "prompt_ko": (
+                "영어 수업에서 비슷한 상황에 있다면 어떤 기분이 들까요? "
+                "긴장되는지, 편안한지, 흥미로운지, 또는 다른 감정이 드는지와 그 이유를 설명해 보세요."
+            ),
+        },
+        "q4": {
+            "prompt": f"What might {character_focus} think at this moment?",
+            "prompt_ko": f"이 순간 {character_focus}는 무슨 생각을 할까요?",
+        },
+        "q5": {
+            "prompt": (
+                "In a similar situation in English class, what would you think about your English ability? "
+                "How would you notice your problem and try to manage it?"
+            ),
+            "prompt_ko": (
+                "영어 수업에서 비슷한 상황에 있다면 자신의 영어 능력에 대해 어떤 생각이 들까요? "
+                "자신의 어려움을 어떻게 알아차리고 어떻게 관리하려고 할지도 함께 설명해 보세요."
+            ),
+        },
+        "q6": {
+            "prompt": f"What could {character_focus} do in this situation?",
+            "prompt_ko": f"이 상황에서 {character_focus}는 무엇을 할 수 있을까요?",
+        },
+        "q7": {
+            "prompt": (
+                "In a similar situation in English class, what would you do? "
+                "Would you speak, stay quiet, ask for help, practice more, or avoid the situation? Explain."
+            ),
+            "prompt_ko": (
+                "영어 수업에서 비슷한 상황에 있다면 어떻게 행동할까요? "
+                "말하려고 하는지, 조용히 있는지, 도움을 요청하는지, 더 연습하는지, 또는 피하려고 하는지 설명해 보세요."
+            ),
+        },
+        "q8": {
+            "prompt": f"What is the best way for {character_focus} to handle this situation? Why?",
+            "prompt_ko": f"{character_focus}가 이 상황을 가장 잘 다루는 방법은 무엇일까요? 왜 그렇게 생각하나요?",
+        },
+        "q9": {
+            "prompt": (
+                "What strategy would help you the most in a similar situation in English class? "
+                "Explain what you would do and how it helps you."
+            ),
+            "prompt_ko": (
+                "영어 수업에서 비슷한 상황이 있을 때 어떤 전략이 가장 도움이 될까요? "
+                "무엇을 할 것인지와 그것이 어떻게 도움이 되는지 설명해 보세요."
+            ),
+        },
+    }
+
+
+def apply_prompt_map_to_sections(prompt_map: dict) -> list:
+    sections = deepcopy(QUESTION_SECTION_BLUEPRINTS)
+    for section in sections:
+        for question in section["questions"]:
+            generated = prompt_map[question["id"]]
+            question["prompt"] = generated["prompt"]
+            question["prompt_ko"] = generated["prompt_ko"]
+    return sections
+
+
+def generate_prompt_map_with_openai(questionnaire: dict, api_key: str, model: str) -> dict:
+    client = get_openai_client(api_key)
+    question_slot_instructions = build_question_slot_instructions()
+
+    system_prompt = """
+You design bilingual questionnaire prompts for an English-learning diagnostic app.
+Return valid JSON only.
+Create exactly 9 prompts with ids q1 to q9.
+Use short, clear English suitable for learners.
+Make each Korean translation natural and faithful.
+Keep self questions explicitly connected to English class.
+Do not show technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or Oxford strategy type in the student-facing questions.
+Make the questions passage-specific and distinct.
+"""
+
+    user_prompt = f"""
+Passage title: {questionnaire['story_title']}
+Main character focus: {questionnaire.get('character_focus', '')}
+Relationship focus: {questionnaire.get('relationship_focus', '')}
+
+Passage in English:
+{questionnaire['text']}
+
+Passage in Korean:
+{questionnaire['text_ko']}
+
+Evaluation criteria:
+{QUESTION_GENERATION_CRITERIA}
+
+Question slots:
+{question_slot_instructions}
+
+Return JSON only in this format:
+{{
+  "questions": [
+    {{"id": "q1", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q2", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q3", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q4", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q5", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q6", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q7", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q8", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q9", "prompt": "....", "prompt_ko": "...."}}
+  ]
+}}
+"""
+
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt.strip()},
+            {"role": "user", "content": user_prompt.strip()},
+        ],
+    )
+
+    response_text = completion.choices[0].message.content or ""
+    payload = extract_json_object(response_text)
+    return normalize_prompt_map(payload)
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def build_generated_questionnaire(questionnaire_json: str, api_key: str, model: str) -> dict:
+    questionnaire = json.loads(questionnaire_json)
+    fallback_prompt_map = build_rule_based_prompt_map(questionnaire)
+    fallback_sections = apply_prompt_map_to_sections(fallback_prompt_map)
+
+    if not api_key:
+        return {
+            "sections": fallback_sections,
+            "question_source": "rule_based",
+            "question_model": "",
+            "question_generation_note": "OpenAI API key is not configured.",
+        }
+
+    try:
+        prompt_map = generate_prompt_map_with_openai(
+            questionnaire=questionnaire,
+            api_key=api_key,
+            model=model,
+        )
+        return {
+            "sections": apply_prompt_map_to_sections(prompt_map),
+            "question_source": "openai",
+            "question_model": model,
+            "question_generation_note": "Questions were generated from the passage with OpenAI.",
+        }
+    except Exception:
+        return {
+            "sections": fallback_sections,
+            "question_source": "rule_based",
+            "question_model": model,
+            "question_generation_note": "OpenAI question generation failed, so the app is using the built-in fallback questions.",
+        }
+
+
+def build_questionnaires(question_generation_config: dict) -> list:
+    questionnaires = []
+
+    for questionnaire_definition in QUESTIONNAIRE_DEFINITIONS:
+        generated = build_generated_questionnaire(
+            questionnaire_json=json.dumps(questionnaire_definition, ensure_ascii=False, sort_keys=True),
+            api_key=question_generation_config["api_key"],
+            model=question_generation_config["model"],
+        )
+        questionnaire = dict(questionnaire_definition)
+        questionnaire["sections"] = generated["sections"]
+        questionnaire["question_source"] = generated["question_source"]
+        questionnaire["question_model"] = generated["question_model"]
+        questionnaire["question_generation_note"] = generated["question_generation_note"]
+        questionnaires.append(questionnaire)
+
+    return questionnaires
 
 
 def get_all_questions(questionnaire: dict) -> list:
@@ -942,6 +1201,8 @@ def build_response_row(
         "questionnaire_title_ko": questionnaire["page_title_ko"],
         "story_title": questionnaire["story_title"],
         "sequence_order": step_order,
+        "question_source": questionnaire.get("question_source", "rule_based"),
+        "question_model": questionnaire.get("question_model", ""),
         "total_questions": len(get_all_questions(questionnaire)),
         "minimum_sentences_required": MIN_SENTENCES,
         "recommended_sentences": RECOMMENDED_SENTENCES,
@@ -983,6 +1244,8 @@ def build_evaluation_row(
         "questionnaire_title_ko": questionnaire["page_title_ko"],
         "story_title": questionnaire["story_title"],
         "sequence_order": step_order,
+        "question_source": questionnaire.get("question_source", "rule_based"),
+        "question_model": questionnaire.get("question_model", ""),
         "evaluation_method": evaluation["evaluation_method"],
         "emotion_layer": "Emotion",
         "FLA": evaluation["FLA"],
@@ -1088,6 +1351,10 @@ def initialize_questionnaire_widgets(questionnaire: dict):
 initialize_session_state()
 ensure_output_directories()
 google_sheets_config = get_google_sheets_config()
+question_generation_config = get_question_generation_config()
+
+with st.spinner("Preparing passage-based questions..."):
+    QUESTIONNAIRES = build_questionnaires(question_generation_config)
 
 
 # -----------------------------
@@ -1139,6 +1406,18 @@ else:
         "Storage mode: Local CSV fallback. Google Sheets is not configured yet.\n\n"
         f"Current local files: `{RESPONSES_FILE}` and `{EVALUATIONS_FILE}`"
     )
+
+if current_questionnaire.get("question_source") == "openai":
+    st.success(
+        "Question mode: Passage-based AI generation is active.\n\n"
+        f"Model: `{current_questionnaire.get('question_model', DEFAULT_QUESTION_MODEL)}`"
+    )
+else:
+    st.info(
+        "Question mode: Built-in fallback questions are active.\n\n"
+        "Add `OPENAI_API_KEY` or `[openai].api_key` in Streamlit secrets to generate the questions from the passage with `gpt-5-mini`."
+    )
+st.caption(current_questionnaire.get("question_generation_note", ""))
 
 st.info(
     "This activity checks how students respond to a CEFR-level story and a literature passage. "
