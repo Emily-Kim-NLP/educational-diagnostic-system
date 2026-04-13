@@ -38,8 +38,8 @@ DEFAULT_RESPONSES_WORKSHEET = "questionnaire_responses"
 DEFAULT_EVALUATIONS_WORKSHEET = "state_evaluations"
 DEFAULT_LLM_MODEL = "gpt-5-mini"
 
-MIN_SENTENCES = 2
-RECOMMENDED_SENTENCES = 3
+MIN_SENTENCES = 1
+RECOMMENDED_SENTENCES = 2
 CEFR_LEVEL_OPTIONS = ["A1", "A2", "B1", "B2", "C1"]
 
 QUESTION_SECTION_BLUEPRINTS = [
@@ -59,7 +59,9 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q2",
                 "layer": "Understanding",
                 "type": "Depth 2",
+                "depends_on": "q1",
                 "question_goal": "Ask a deeper inference or evidence question about why the event matters, what causes it, or which detail is most important.",
+                "criteria_focus": "Generate a deeper follow-up question based on the learner's first understanding answer. Ask for a reason, key evidence, cause, or important detail from the passage.",
             },
         ],
     },
@@ -205,6 +207,20 @@ Strategy
 """
 
 PERSONALIZED_SELF_QUESTION_SPECS = {
+    "q2": {
+        "state_targets": "Understanding depth / evidence",
+        "criteria_focus": (
+            "Generate a deeper understanding follow-up question based on the learner's answer to Q1. "
+            "Ask the learner to explain an important detail, cause, reason, or evidence from the passage."
+        ),
+        "fallback_en": (
+            "Based on your answer to Q1, which detail from the passage best supports your idea? Explain a little more."
+        ),
+        "fallback_ko": (
+            "Q1에 대한 당신의 답을 바탕으로, 지문에서 당신의 생각을 가장 잘 뒷받침하는 세부 내용은 무엇인가요? 조금 더 설명해 보세요."
+        ),
+        "note": "This follow-up is linked to your answer in Q1 and asks for deeper understanding.",
+    },
     "q4": {
         "state_targets": "FLA / FLE",
         "criteria_focus": (
@@ -800,11 +816,11 @@ def build_fallback_experiment(cefr_level: str, reason: str) -> dict:
     questionnaire["page_title_ko"] = "CEFR 상호작용 진단"
     questionnaire["intro"] = (
         "Read the passage on the left and answer every question on the right in English. "
-        "Each answer must include at least 2 complete sentences with periods."
+        "Short answers are allowed, and longer answers are welcome."
     )
     questionnaire["intro_ko"] = (
         "왼쪽 지문을 읽고 오른쪽 질문에 모두 영어로 답하세요. "
-        "각 답변은 마침표가 있는 완전한 영어 문장 최소 2개 이상이어야 합니다."
+        "짧은 답변도 가능하며, 더 길게 써도 됩니다."
     )
     questionnaire["cefr_level"] = cefr_level
     questionnaire["text"] = format_passage_markdown(template["story_title"], template["passage_sentences"])
@@ -845,11 +861,11 @@ def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
         "relationship_focus_ko": relationship_focus_ko,
         "intro": (
             "Read the CEFR-level passage on the left and answer every question on the right in English. "
-            "Each answer must include at least 2 complete sentences with periods."
+            "Short answers are allowed, and longer answers are welcome."
         ),
         "intro_ko": (
             "왼쪽 CEFR 수준 지문을 읽고 오른쪽 질문에 모두 영어로 답하세요. "
-            "각 답변은 마침표가 있는 완전한 영어 문장 최소 2개 이상이어야 합니다."
+            "짧은 답변도 가능하며, 더 길게 써도 됩니다."
         ),
         "cefr_level": cefr_level,
         "passage_sentences": passage_sentences,
@@ -1022,48 +1038,51 @@ def build_rule_based_answer_feedback(question: dict, answer: str) -> dict:
     if not stripped:
         return {
             "status": "rewrite",
-            "message": "This answer is incomplete. Please write at least 2 complete English sentences and answer the question directly.",
-            "message_ko": "이 답변은 불완전합니다. 영어 완전한 문장 2개 이상으로 질문에 직접 답하도록 다시 작성해 주세요.",
+            "message": "This answer is incomplete. Please write something for this question.",
+            "message_ko": "이 답변은 불완전합니다. 이 질문에 대해 내용을 적어 주세요.",
         }
 
-    invalid_patterns = [
+    if not re.search(r"[A-Za-z]", stripped):
+        return {
+            "status": "rewrite",
+            "message": "This answer is incomplete. Please rewrite it with a simple English answer.",
+            "message_ko": "이 답변은 불완전합니다. 간단한 영어 답변으로 다시 작성해 주세요.",
+        }
+
+    idk_patterns = [
         "i don't know",
         "i do not know",
         "dont know",
         "idk",
-        "not sure",
         "no idea",
-        "maybe",
-        "i guess",
-        "what?",
+    ]
+    weird_short_patterns = [
+        "?",
+        "??",
+        "...",
+        "..",
+        "what",
         "huh",
     ]
 
-    if sentence_count(stripped) < MIN_SENTENCES:
+    if contains_any(lower, idk_patterns):
         return {
             "status": "rewrite",
-            "message": "This answer is incomplete. Please rewrite it in at least 2 complete English sentences with periods.",
-            "message_ko": "이 답변은 불완전합니다. 마침표가 있는 영어 완전한 문장 2개 이상으로 다시 작성해 주세요.",
+            "message": "This answer is incomplete because it says I don't know. Please try to answer in simple English.",
+            "message_ko": "이 답변은 I don't know라고 되어 있어서 불완전합니다. 쉬운 영어로라도 답해 주세요.",
         }
 
-    if word_count(stripped) < 6 or contains_any(lower, invalid_patterns):
+    if lower in weird_short_patterns or (word_count(stripped) == 1 and len(stripped) <= 2):
         return {
             "status": "rewrite",
-            "message": "This answer looks incomplete or unclear. Please rewrite it in complete English sentences and answer the question more clearly.",
-            "message_ko": "이 답변은 불완전하거나 모호해 보입니다. 영어 완전한 문장으로 질문에 더 분명하게 답하도록 다시 작성해 주세요.",
-        }
-
-    if stripped.endswith("?"):
-        return {
-            "status": "rewrite",
-            "message": "This answer looks incomplete because it reads like a question. Please rewrite it as complete English sentences.",
-            "message_ko": "이 답변은 질문처럼 보여서 불완전합니다. 영어 완전한 문장으로 다시 작성해 주세요.",
+            "message": "This answer looks too unclear to use. Please rewrite it with a simple English answer.",
+            "message_ko": "이 답변은 사용하기에 너무 모호합니다. 쉬운 영어 답변으로 다시 작성해 주세요.",
         }
 
     return {
         "status": "valid",
-        "message": "Good. This answer is clear enough to continue.",
-        "message_ko": "좋습니다. 이 답변은 다음 단계로 진행할 만큼 충분히 분명합니다.",
+        "message": "Recorded. You can continue.",
+        "message_ko": "기록되었습니다. 계속 진행할 수 있습니다.",
     }
 
 
@@ -1081,8 +1100,8 @@ You evaluate one learner answer for an English-education diagnostic app.
 Return valid JSON only.
 
 Rules:
-- Mark status as "rewrite" if the answer is off-topic, too vague, says I don't know, is incomplete, asks a question back, or does not contain at least 2 complete English sentences.
-- Mark status as "valid" only if the answer directly addresses the question and is clear enough to continue.
+- Mark status as "rewrite" only when the answer is empty, says I don't know or no idea, is only symbols or random text, or is so strange that it cannot be used.
+- Mark status as "valid" for short, weak, grammatically incorrect, or partially incorrect English if it still looks like an attempt to answer.
 - If status is "rewrite", the message must explicitly say the answer is incomplete and must be rewritten.
 - Keep feedback short, warm, and direct.
 """
@@ -1155,16 +1174,20 @@ def build_pending_self_prompt(
 ) -> dict:
     reason_en = source_feedback.get(
         "message",
-        "The previous answer needs to be rewritten in complete English sentences.",
+        "The previous answer needs to be rewritten before the next question can be created.",
     )
     reason_ko = source_feedback.get(
         "message_ko",
-        "이전 답변을 영어 완전한 문장으로 다시 작성해야 합니다.",
+        "다음 질문을 만들기 전에 이전 답변을 다시 작성해야 합니다.",
     )
 
     return {
-        "prompt": question.get("base_prompt", question.get("prompt", "")),
-        "prompt_ko": question.get("base_prompt_ko", question.get("prompt_ko", "")),
+        "prompt": (
+            f"Finish {source_question['label']} first. The interactive follow-up question for this part will appear here after your answer is usable."
+        ),
+        "prompt_ko": (
+            f"먼저 {source_question['label']}에 답해 주세요. 이 파트의 상호작용형 후속 질문은 답변을 사용할 수 있게 되면 여기에 나타납니다."
+        ),
         "prompt_source": "pending",
         "prompt_note": (
             f"Rewrite {source_question['label']} first. {reason_en}\n\n"
@@ -1198,9 +1221,11 @@ def generate_personalized_self_prompt_with_openai(
     spec = get_personalized_self_spec(question["id"])
 
     system_prompt = """
-You generate one personalized self-reflection question for an English-education diagnostic app.
+You generate one interactive follow-up question for an English-education diagnostic app.
 Return valid JSON only.
-The question must connect to the learner's answer about the character, but it must move into the learner's own experience in English class.
+The question must be the second question in a part and must clearly connect to the learner's answer to the first question.
+If the follow-up question type is Self, it must move into the learner's own experience in English class.
+If the follow-up question type is Depth 2, it must stay focused on the passage and deepen the learner's reasoning.
 Use simple, learner-friendly English.
 Do not mention technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or strategy type.
 Make the Korean translation natural and faithful.
@@ -1212,22 +1237,23 @@ Passage:
 {questionnaire['passage_plain']}
 
 Current layer: {question['layer']}
+Follow-up question type: {question['type']}
 State targets: {spec.get('state_targets', '')}
 Instruction:
 {spec.get('criteria_focus', '')}
 
-Base self question:
+Base follow-up direction:
 {question.get('base_prompt', question.get('prompt', ''))}
 
-Character question:
+First question in this part:
 {source_question['prompt']}
 
-Learner's answer to the character question:
+Learner's answer to the first question:
 {source_answer}
 
-Create one self question for English class that:
+Create one interactive follow-up question that:
 1. Feels clearly linked to the learner's answer above.
-2. Still helps evaluate the learner's state in English learning.
+2. Matches the layer and question type.
 3. Sounds natural for a student questionnaire.
 4. Uses 1 or 2 short sentences.
 
@@ -1270,7 +1296,7 @@ def build_personalized_self_prompt(
     source_question = json.loads(source_question_json)
     source_feedback = json.loads(source_feedback_json)
 
-    if sentence_count(source_answer) < MIN_SENTENCES or source_feedback.get("status") != "valid":
+    if not source_answer.strip() or source_feedback.get("status") != "valid":
         return build_pending_self_prompt(question, source_question, source_feedback)
 
     fallback = build_rule_based_personalized_self_prompt(question)
@@ -1307,7 +1333,7 @@ def materialize_questionnaire_for_answers(
         question["prompt_note"] = ""
         question["ready_for_answer"] = True
 
-        if question["type"] != "Self" or not question.get("depends_on"):
+        if not question.get("depends_on"):
             continue
 
         source_question = question_lookup[question["depends_on"]]
@@ -1863,6 +1889,7 @@ def initialize_session_state():
         "student_number_value": "",
         "cefr_level_value": "",
         "active_questionnaire": {},
+        "current_section_index": 0,
         "generation_nonce": "",
         "submission_complete": False,
         "last_submission_id": "",
@@ -1891,6 +1918,7 @@ def reset_session_state():
         "student_number_value",
         "cefr_level_value",
         "active_questionnaire",
+        "current_section_index",
         "generation_nonce",
         "submission_complete",
         "last_submission_id",
@@ -2284,7 +2312,7 @@ def render_page_header():
         <div class="hero-title">CEFR Interactive Diagnostic</div>
         <div class="hero-subtitle">
             Generate one CEFR-level passage with interactive state-evaluation questions, keep the passage visible on the left,
-            and guide participants to answer in complete English sentences.
+            and let participants move part by part through adaptive follow-up questions.
         </div>
         """,
         unsafe_allow_html=True,
@@ -2321,7 +2349,7 @@ def render_placeholder():
             <div class="panel-title">Ready to Build the Experiment</div>
             <div class="panel-subtitle">
                 Enter the participant profile above, then click <b>Generate Passage &amp; Questions</b>.
-                The app will create a CEFR-level passage, interactive prompts, and state-linked follow-up questions.
+                The app will create a CEFR-level passage, then run the questionnaire part by part with adaptive follow-up questions.
             </div>
         </div>
         """,
@@ -2510,6 +2538,7 @@ if generate_clicked:
         st.session_state.student_number_value = st.session_state.student_number_input.strip()
         st.session_state.cefr_level_value = st.session_state.cefr_level_input
         st.session_state.active_questionnaire = questionnaire
+        st.session_state.current_section_index = 0
         st.session_state.generation_nonce = generation_nonce
         st.rerun()
 
@@ -2571,18 +2600,28 @@ with st.spinner(
         llm_config=llm_config,
     )
 
+if st.session_state.current_section_index >= len(current_questionnaire["sections"]):
+    st.session_state.current_section_index = max(0, len(current_questionnaire["sections"]) - 1)
+
+current_section_index = st.session_state.current_section_index
+current_section = current_questionnaire["sections"][current_section_index]
+
 st.caption(
     f"Question status: {current_questionnaire.get('question_generation_note', '')}"
 )
 st.info(
     "Answer guide: Every response must be written in English. "
-    "Each answer needs at least 2 complete sentences with periods. "
-    "If the answer is too vague, says I don't know, or does not fit the question, the app will ask the participant to rewrite it as incomplete.\n\n"
-    "답변 가이드: 모든 답변은 영어로 작성해야 하며, 마침표가 있는 완전한 영어 문장 최소 2개가 필요합니다. "
-    "답변이 너무 모호하거나 I don't know와 비슷하거나 질문에 맞지 않으면 불완전한 답변으로 판단되어 다시 작성하라는 안내가 나옵니다."
+    "Short answers are allowed. The app only asks for a rewrite when the answer is empty, says I don't know, or is too unclear to use. "
+    "In each part, Question 1 appears first, and Question 2 is generated from the answer to Question 1.\n\n"
+    "답변 가이드: 짧은 답변도 가능합니다. 답이 비어 있거나 I don't know이거나 사용하기 어려울 만큼 이상한 경우에만 다시 쓰라는 안내가 나옵니다. "
+    "각 파트에서는 1번 질문이 먼저 나오고, 2번 질문은 1번 답변을 보고 생성됩니다."
 )
 
 passage_col, question_col = st.columns([0.9, 1.3], gap="large")
+
+previous_clicked = False
+next_clicked = False
+submit_clicked = False
 
 with passage_col:
     render_passage_panel(
@@ -2598,88 +2637,140 @@ with question_col:
         <div class="question-shell">
             <div class="panel-title">Interactive Questionnaire</div>
             <div class="panel-subtitle">
-                Answer every question in English. The self questions are personalized after the related character answer becomes clear enough.
+                Move one part at a time. In each part, the second question opens only after the first answer is usable.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    completed_questions = 0
     total_questions = len(get_all_questions(current_questionnaire))
     questionnaire_json = json.dumps(current_questionnaire, ensure_ascii=False, sort_keys=True)
-    current_answers = {}
+    current_answers = {
+        question["id"]: st.session_state.get(widget_key(question["id"]), "").strip()
+        for question in get_all_questions(current_questionnaire)
+    }
 
-    for section in current_questionnaire["sections"]:
-        render_section_header(section)
+    render_section_header(current_section)
+    st.caption(f"Part {current_section_index + 1} of {len(current_questionnaire['sections'])}")
 
-        for question in section["questions"]:
-            question_key = widget_key(question["id"])
-            if not question.get("ready_for_answer", True):
-                st.session_state[question_key] = ""
-            render_question_card(question)
+    section_completed_questions = 0
+    section_total_questions = len(current_section["questions"])
 
-            answer = st.text_area(
-                f"{question['label']}. {question['prompt']}",
-                key=question_key,
-                label_visibility="collapsed",
-                height=170,
-                disabled=not question.get("ready_for_answer", True),
-                placeholder=(
-                    "Write at least 2 complete English sentences. Use a period (.) at the end of each sentence."
-                    if question.get("ready_for_answer", True)
-                    else "The previous answer must be rewritten clearly before this follow-up opens."
-                ),
+    for question in current_section["questions"]:
+        question_key = widget_key(question["id"])
+        if not question.get("ready_for_answer", True):
+            st.session_state[question_key] = ""
+        render_question_card(question)
+
+        answer = st.text_area(
+            f"{question['label']}. {question['prompt']}",
+            key=question_key,
+            label_visibility="collapsed",
+            height=170,
+            disabled=not question.get("ready_for_answer", True),
+            placeholder=(
+                "Write a simple English answer. Short answers are okay."
+                if question.get("ready_for_answer", True)
+                else "The follow-up question will open after the first answer in this part is usable."
+            ),
+        )
+        answer = answer.strip()
+        current_answers[question["id"]] = answer
+
+        if not question.get("ready_for_answer", True):
+            render_status_box(
+                "status-box-neutral",
+                "This follow-up will open after the previous answer can be used to create the next question.",
             )
-            answer = answer.strip()
-            current_answers[question["id"]] = answer
+            continue
 
-            if not question.get("ready_for_answer", True):
-                render_status_box(
-                    "status-box-neutral",
-                    "This follow-up will open after the previous answer is clear enough and written in complete English sentences.",
-                )
-                continue
-
-            if not answer:
-                render_status_box(
-                    "status-box-neutral",
-                    "Counted sentences: 0. Start writing in English and end each sentence with a period (.).",
-                )
-                continue
-
-            feedback = get_answer_feedback(
-                questionnaire_json=questionnaire_json,
-                question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
-                answer=answer,
-                api_key=llm_config["api_key"],
-                model=llm_config["model"],
+        if not answer:
+            render_status_box(
+                "status-box-neutral",
+                "Write an answer for this question to continue.",
             )
-            counted_sentences = sentence_count(answer)
+            continue
 
-            if feedback["status"] == "valid":
-                completed_questions += 1
-                render_status_box(
-                    "status-box-valid",
-                    (
-                        f"Completed. Counted sentences: {counted_sentences}. "
-                        f"{feedback['message']} / {feedback['message_ko']}"
-                    ),
-                )
-            else:
-                render_status_box(
-                    "status-box-rewrite",
-                    (
-                        f"Counted sentences: {counted_sentences}. "
-                        f"{feedback['message']} / {feedback['message_ko']}"
-                    ),
-                )
+        feedback = get_answer_feedback(
+            questionnaire_json=questionnaire_json,
+            question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
+            answer=answer,
+            api_key=llm_config["api_key"],
+            model=llm_config["model"],
+        )
+
+        if feedback["status"] == "valid":
+            section_completed_questions += 1
+            render_status_box(
+                "status-box-valid",
+                f"Complete. {feedback['message']} / {feedback['message_ko']}",
+            )
+        else:
+            render_status_box(
+                "status-box-rewrite",
+                f"{feedback['message']} / {feedback['message_ko']}",
+            )
+
+    completed_questions = 0
+    for question in get_all_questions(current_questionnaire):
+        answer = current_answers.get(question["id"], "").strip()
+        if not question.get("ready_for_answer", True) or not answer:
+            continue
+
+        feedback = get_answer_feedback(
+            questionnaire_json=questionnaire_json,
+            question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
+            answer=answer,
+            api_key=llm_config["api_key"],
+            model=llm_config["model"],
+        )
+        if feedback["status"] == "valid":
+            completed_questions += 1
+
+    section_complete = section_completed_questions == section_total_questions
 
     st.markdown("### Completion")
-    st.caption(f"Completed questions: {completed_questions} / {total_questions}")
+    st.caption(f"Current part: {section_completed_questions} / {section_total_questions}")
+    st.progress(section_completed_questions / section_total_questions if section_total_questions else 0.0)
+    st.caption(f"Overall: {completed_questions} / {total_questions}")
     st.progress(completed_questions / total_questions if total_questions else 0.0)
 
-    submit_clicked = st.button("Submit Responses", use_container_width=True)
+    if not section_complete:
+        st.caption("Finish this part first. Then the Next button will be available.")
+
+    nav_col1, nav_col2 = st.columns(2)
+    with nav_col1:
+        previous_clicked = st.button(
+            "Previous Part",
+            use_container_width=True,
+            disabled=(current_section_index == 0),
+        )
+    with nav_col2:
+        if current_section_index < len(current_questionnaire["sections"]) - 1:
+            next_clicked = st.button(
+                "Next Part",
+                use_container_width=True,
+                disabled=(not section_complete or profile_changed_after_generation),
+            )
+        else:
+            submit_clicked = st.button(
+                "Submit Responses",
+                use_container_width=True,
+                disabled=(not section_complete or profile_changed_after_generation),
+            )
+
+
+if previous_clicked:
+    st.session_state.current_section_index = max(0, current_section_index - 1)
+    st.rerun()
+
+if next_clicked:
+    st.session_state.current_section_index = min(
+        len(current_questionnaire["sections"]) - 1,
+        current_section_index + 1,
+    )
+    st.rerun()
 
 
 if submit_clicked:
