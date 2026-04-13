@@ -42,6 +42,28 @@ DEFAULT_LLM_MODEL = "gpt-5-mini"
 MIN_SENTENCES = 1
 RECOMMENDED_SENTENCES = 2
 CEFR_LEVEL_OPTIONS = ["A1", "A2", "B1", "B2", "C1", "C2"]
+TARGET_PASSAGE_SENTENCE_COUNT = 10
+BACKGROUND_OPTIONS = [
+    "Classroom",
+    "Campus life",
+    "Daily life",
+    "Part-time job",
+    "Travel",
+    "Online communication",
+    "Friendship",
+    "Club activity",
+    "Test preparation",
+    "Self-study",
+]
+GENRE_OPTIONS = [
+    "Narrative story",
+    "Dialogue",
+    "Message/chat",
+    "Email",
+    "Reflection journal",
+    "Problem situation",
+    "Short anecdote",
+]
 
 QUESTION_SECTION_BLUEPRINTS = [
     {
@@ -53,7 +75,7 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q1",
                 "layer": "Understanding",
                 "type": "Character",
-                "question_goal": "Ask the learner to explain the main situation or event from the passage in their own words.",
+                "question_goal": "Ask the learner to explain the main situation, goal, or problem from the passage in their own words.",
             },
             {
                 "id": "q2",
@@ -61,8 +83,8 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "layer": "Understanding",
                 "type": "Depth 2",
                 "depends_on": "q1",
-                "question_goal": "Ask a deeper inference or evidence question about why the event matters, what causes it, or which detail is most important.",
-                "criteria_focus": "Generate a deeper follow-up question based on the learner's first understanding answer. Ask for a reason, key evidence, cause, or important detail from the passage.",
+                "question_goal": "Ask a deeper inference or evidence question about why the situation matters, what causes the turning point, or which detail is most important.",
+                "criteria_focus": "Generate a deeper follow-up question based on the learner's first understanding answer. Ask for a reason, key evidence, cause, turning point, or important detail from the passage.",
             },
         ],
     },
@@ -83,8 +105,8 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "layer": "Emotion",
                 "type": "Self",
                 "depends_on": "q3",
-                "question_goal": "Ask how the learner would feel in a similar English-learning situation.",
-                "criteria_focus": "Target FLA and FLE without naming those labels. Encourage feelings such as nervous, worried, afraid, comfortable, relaxed, interested, happy, or enjoying the class.",
+                "question_goal": "Ask how the learner would feel in a similar situation in their own life.",
+                "criteria_focus": "Target anxiety versus enjoyment without naming technical labels. Encourage feelings such as nervous, worried, afraid, comfortable, relaxed, interested, happy, or enjoying the situation.",
             },
         ],
     },
@@ -105,8 +127,8 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "layer": "Cognition",
                 "type": "Self",
                 "depends_on": "q5",
-                "question_goal": "Ask what the learner would think about their own English ability and how they would notice or manage difficulty.",
-                "criteria_focus": "Target self-efficacy and metacognition without naming the labels. Encourage reflection on ability, confidence, noticing problems, and managing or improving learning.",
+                "question_goal": "Ask what the learner would think about their own ability and how they would notice or manage difficulty in a similar situation.",
+                "criteria_focus": "Target confidence and metacognitive reflection without naming technical labels. Encourage reflection on ability, confidence, noticing problems, and managing or improving performance in a natural way.",
             },
         ],
     },
@@ -127,8 +149,8 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "layer": "Behavior",
                 "type": "Self",
                 "depends_on": "q7",
-                "question_goal": "Ask what the learner would do in a similar English-learning situation.",
-                "criteria_focus": "Target WTC, coping, and engagement without naming the labels. Encourage reflection on speaking, staying quiet, asking for help, preparing, practicing, avoiding, or participating.",
+                "question_goal": "Ask what the learner would do in a similar situation in their own life.",
+                "criteria_focus": "Target communication, coping, and engagement without naming technical labels. Encourage reflection on speaking, staying quiet, asking for help, preparing, practicing, avoiding, or participating.",
             },
         ],
     },
@@ -149,8 +171,8 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "layer": "Strategy",
                 "type": "Self",
                 "depends_on": "q9",
-                "question_goal": "Ask what strategy would help the learner most in a similar English-learning situation.",
-                "criteria_focus": "Target Oxford-based strategy type and quality without naming the labels. Encourage strategy examples such as practice, planning, calming down, asking others, guessing, or using simple words.",
+                "question_goal": "Ask what strategy would help the learner most in a similar situation in their own life.",
+                "criteria_focus": "Target strategy type and quality without naming technical labels. Encourage strategy examples such as practice, planning, calming down, asking others, guessing, or using simple words.",
             },
         ],
     },
@@ -158,6 +180,17 @@ QUESTION_SECTION_BLUEPRINTS = [
 
 QUESTION_GENERATION_CRITERIA = """
 Layer and evaluation targets:
+
+Fluency
+- Low: very short or isolated responses with little connection between ideas.
+- Mid: basic connected response using at least one connector such as and, because, but, so, when, if, or then.
+- High: longer and more organized response with connected ideas, some clause or sentence complexity, clear flow, and an explanation of what the learner would do, think, or try.
+- Observable features to support fluency judgment:
+  Sentence length: enough development beyond a fragment or one short line.
+  Connector use: and, because, but, so, when, if, or then.
+  Structure complexity: clauses, combined ideas, or more than one linked statement.
+  Organization: order or logic such as first, next, then, later, finally, so, or in the end.
+  Strategy expression: explaining a solution, plan, reason, coping action, or next step.
 
 Emotion
 - FLA (Foreign Language Anxiety)
@@ -212,7 +245,7 @@ PERSONALIZED_SELF_QUESTION_SPECS = {
         "state_targets": "Understanding depth / evidence",
         "criteria_focus": (
             "Generate a deeper understanding follow-up question based on the learner's answer to Q1. "
-            "Ask the learner to explain an important detail, cause, reason, or evidence from the passage."
+            "Ask the learner to explain an important detail, cause, turning point, reason, or evidence from the passage."
         ),
         "fallback_en": (
             "Based on your answer to Q1, which detail from the passage best supports your idea? Explain a little more."
@@ -225,66 +258,66 @@ PERSONALIZED_SELF_QUESTION_SPECS = {
     "q4": {
         "state_targets": "FLA / FLE",
         "criteria_focus": (
-            "Generate a self question for English class that connects the learner's character-emotion answer "
-            "to their own emotional state. It should help reveal anxiety versus enjoyment without naming the labels."
+            "Generate a self question for a similar real-life situation that connects the learner's character-emotion answer "
+            "to their own emotional state. It should help reveal anxiety versus enjoyment without naming technical labels."
         ),
         "fallback_en": (
-            "In a similar situation in English class, how would you feel? "
+            "In a similar situation in your own life, how would you feel? "
             "Would you feel nervous, comfortable, interested, happy, or something else? Explain why."
         ),
         "fallback_ko": (
-            "영어 수업에서 비슷한 상황이라면 어떤 기분이 들까요? "
+            "당신의 삶에서 비슷한 상황이라면 어떤 기분이 들까요? "
             "긴장되는지, 편안한지, 흥미로운지, 행복한지, 또는 다른 감정이 드는지와 그 이유를 설명해 보세요."
         ),
-        "note": "This follow-up is linked to your answer in Q3 and checks your English-class emotion state.",
+        "note": "This follow-up is linked to your answer in Q3 and checks your emotion in a similar situation.",
     },
     "q6": {
         "state_targets": "Self-efficacy / Metacognition",
         "criteria_focus": (
-            "Generate a self question for English class that connects the learner's character-thinking answer "
+            "Generate a self question for a similar real-life situation that connects the learner's character-thinking answer "
             "to their own confidence, self-awareness, noticing problems, and regulation."
         ),
         "fallback_en": (
-            "In a similar situation in English class, what would you think about your English ability? "
+            "In a similar situation in your own life, what would you think about your own ability? "
             "How would you notice your problem and try to manage it?"
         ),
         "fallback_ko": (
-            "영어 수업에서 비슷한 상황이라면 자신의 영어 능력에 대해 어떤 생각이 들까요? "
+            "당신의 삶에서 비슷한 상황이라면 자신의 능력에 대해 어떤 생각이 들까요? "
             "자신의 문제를 어떻게 알아차리고 어떻게 관리하려고 할지도 설명해 보세요."
         ),
-        "note": "This follow-up is linked to your answer in Q5 and checks your English-class thinking state.",
+        "note": "This follow-up is linked to your answer in Q5 and checks your thinking in a similar situation.",
     },
     "q8": {
         "state_targets": "WTC / Coping / Engagement",
         "criteria_focus": (
-            "Generate a self question for English class that connects the learner's character-behavior answer "
+            "Generate a self question for a similar real-life situation that connects the learner's character-behavior answer "
             "to their own willingness to communicate, coping under difficulty, and participation."
         ),
         "fallback_en": (
-            "In a similar situation in English class, what would you do? "
+            "In a similar situation in your own life, what would you do? "
             "Would you speak, stay quiet, ask for help, prepare more, practice more, or avoid it? Explain."
         ),
         "fallback_ko": (
-            "영어 수업에서 비슷한 상황이라면 어떻게 행동할까요? "
+            "당신의 삶에서 비슷한 상황이라면 어떻게 행동할까요? "
             "말하려고 하는지, 조용히 있는지, 도움을 요청하는지, 더 준비하거나 연습하는지, 또는 피하려고 하는지 설명해 보세요."
         ),
-        "note": "This follow-up is linked to your answer in Q7 and checks your English-class behavior state.",
+        "note": "This follow-up is linked to your answer in Q7 and checks your behavior in a similar situation.",
     },
     "q10": {
         "state_targets": "Strategy Type / Strategy Quality",
         "criteria_focus": (
-            "Generate a self question for English class that connects the learner's character-strategy answer "
+            "Generate a self question for a similar real-life situation that connects the learner's character-strategy answer "
             "to their own learning strategies. It should help reveal strategy type and quality without naming the labels."
         ),
         "fallback_en": (
-            "In a similar situation in English class, what strategy would help you most? "
+            "In a similar situation in your own life, what strategy would help you most? "
             "Explain what you would do and how it helps you."
         ),
         "fallback_ko": (
-            "영어 수업에서 비슷한 상황이라면 어떤 전략이 가장 도움이 될까요? "
+            "당신의 삶에서 비슷한 상황이라면 어떤 전략이 가장 도움이 될까요? "
             "무엇을 할 것인지와 그것이 어떻게 도움이 되는지 설명해 보세요."
         ),
-        "note": "This follow-up is linked to your answer in Q9 and checks your English-class strategy state.",
+        "note": "This follow-up is linked to your answer in Q9 and checks your strategy use in a similar situation.",
     },
 }
 
@@ -679,6 +712,255 @@ FALLBACK_PASSAGE_VARIANTS_BY_LEVEL = {
     ],
 }
 
+FALLBACK_DYNAMIC_CHARACTER_NAMES = [
+    "Minji",
+    "Jisoo",
+    "Yuna",
+    "Jiho",
+    "Minho",
+    "Sora",
+    "Eunseo",
+    "Arin",
+    "Taewoo",
+    "Hyejin",
+    "Jun",
+    "Hana",
+]
+
+FALLBACK_BACKGROUND_CONFIGS = {
+    "Classroom": {
+        "topic_en": "Class Discussion",
+        "topic_ko": "수업 토의",
+        "setting_en": "in English class",
+        "setting_ko": "영어 수업에서",
+        "context_en": "after class",
+        "context_ko": "수업이 끝난 뒤",
+        "task_en": "share one idea about today's reading",
+        "task_ko": "오늘 읽은 글에 대한 생각 한 가지를 말하다",
+        "focus_en": "the teacher and the class",
+        "focus_ko": "선생님과 반 친구들",
+        "twist_en": "another student speaks first and changes the direction of the discussion",
+        "twist_ko": "다른 학생이 먼저 말하면서 토의의 흐름이 바뀐다",
+        "support_en": "the key words in the notebook",
+        "support_ko": "공책에 적은 핵심 단어",
+        "choice_en": "speaking with simple words, asking for a moment, or staying quiet",
+        "choice_ko": "쉬운 말로 먼저 말하기, 잠깐 생각할 시간을 요청하기, 또는 조용히 있기",
+        "stakes_en": "The next answer could shape the rest of the class activity",
+        "stakes_ko": "다음 대답이 이어지는 수업 활동의 분위기를 바꿀 수 있다",
+    },
+    "Campus life": {
+        "topic_en": "Campus Help Booth",
+        "topic_ko": "캠퍼스 안내 부스",
+        "setting_en": "at a campus help booth",
+        "setting_ko": "캠퍼스 안내 부스에서",
+        "context_en": "during a campus event",
+        "context_ko": "캠퍼스 행사 중에",
+        "task_en": "explain a school event and give directions in English",
+        "task_ko": "학교 행사와 길 안내를 영어로 설명하다",
+        "focus_en": "two exchange students",
+        "focus_ko": "두 명의 교환학생",
+        "twist_en": "one student asks an extra question that was not on the practice sheet",
+        "twist_ko": "한 학생이 연습지에 없던 추가 질문을 한다",
+        "support_en": "a campus map and a short phrase card",
+        "support_ko": "캠퍼스 지도와 짧은 표현 카드",
+        "choice_en": "answering slowly, asking for repetition, or pointing to the map first",
+        "choice_ko": "천천히 답하기, 다시 말해 달라고 하기, 또는 먼저 지도를 가리키기",
+        "stakes_en": "The students need help right away, so the reply matters",
+        "stakes_ko": "학생들은 바로 도움이 필요해서 대답이 중요하다",
+    },
+    "Daily life": {
+        "topic_en": "Voice Message Plan",
+        "topic_ko": "음성 메시지 계획",
+        "setting_en": "at home after school",
+        "setting_ko": "방과 후 집에서",
+        "context_en": "in the evening",
+        "context_ko": "저녁에",
+        "task_en": "send an English voice message about a weekend plan to a family friend abroad",
+        "task_ko": "해외에 있는 가족 친구에게 주말 계획을 영어 음성 메시지로 보내다",
+        "focus_en": "a family friend abroad",
+        "focus_ko": "해외에 있는 가족 친구",
+        "twist_en": "the first recording sounds awkward and misses an important detail",
+        "twist_ko": "첫 녹음이 어색하고 중요한 내용을 하나 빠뜨린다",
+        "support_en": "a short phrase list on the phone",
+        "support_ko": "휴대폰에 저장한 짧은 표현 목록",
+        "choice_en": "recording again, using simpler words, or stopping for now",
+        "choice_ko": "다시 녹음하기, 더 쉬운 말을 쓰기, 또는 잠시 멈추기",
+        "stakes_en": "The message should sound friendly and clear",
+        "stakes_ko": "메시지는 친근하고 분명하게 들려야 한다",
+    },
+    "Part-time job": {
+        "topic_en": "Cafe Order",
+        "topic_ko": "카페 주문",
+        "setting_en": "at a part-time cafe job",
+        "setting_ko": "아르바이트 카페에서",
+        "context_en": "during a busy shift",
+        "context_ko": "손님이 많은 근무 시간에",
+        "task_en": "take a visitor's order in English",
+        "task_ko": "방문 손님의 주문을 영어로 받다",
+        "focus_en": "a customer and the shift manager",
+        "focus_ko": "손님과 매니저",
+        "twist_en": "the customer changes the order and speaks faster than expected",
+        "twist_ko": "손님이 주문을 바꾸고 예상보다 더 빠르게 말한다",
+        "support_en": "the menu board and a practiced opening line",
+        "support_ko": "메뉴판과 미리 연습한 첫 문장",
+        "choice_en": "confirming the order step by step, asking for repetition, or calling the manager immediately",
+        "choice_ko": "주문을 하나씩 다시 확인하기, 다시 말해 달라고 하기, 또는 바로 매니저를 부르기",
+        "stakes_en": "The line is getting longer, so the moment feels urgent",
+        "stakes_ko": "줄이 점점 길어져서 이 순간이 더 급하게 느껴진다",
+    },
+    "Travel": {
+        "topic_en": "Hostel Check-in",
+        "topic_ko": "호스텔 체크인",
+        "setting_en": "at a hostel desk during a school trip",
+        "setting_ko": "수학여행 중 호스텔 안내 데스크에서",
+        "context_en": "during the trip",
+        "context_ko": "여행 중에",
+        "task_en": "ask for transport and breakfast information in English",
+        "task_ko": "교통편과 아침 식사 정보를 영어로 묻다",
+        "focus_en": "the hostel clerk",
+        "focus_ko": "호스텔 직원",
+        "twist_en": "the clerk gives two quick directions at once",
+        "twist_ko": "직원이 두 가지 안내를 한 번에 빠르게 말한다",
+        "support_en": "a travel note saved on the phone",
+        "support_ko": "휴대폰에 저장한 여행 메모",
+        "choice_en": "asking one question at a time, repeating key words, or pretending to understand",
+        "choice_ko": "질문을 하나씩 하기, 핵심 단어를 다시 말해 보기, 또는 이해한 척하기",
+        "stakes_en": "The group needs the information soon",
+        "stakes_ko": "일행은 그 정보를 곧 알아야 한다",
+    },
+    "Online communication": {
+        "topic_en": "Study Call",
+        "topic_ko": "학습 화상 통화",
+        "setting_en": "in an evening video call",
+        "setting_ko": "저녁 화상 통화에서",
+        "context_en": "during online study time",
+        "context_ko": "온라인 학습 시간에",
+        "task_en": "discuss a short article in English with an online study partner",
+        "task_ko": "온라인 학습 파트너와 짧은 글을 영어로 이야기하다",
+        "focus_en": "an online study partner",
+        "focus_ko": "온라인 학습 파트너",
+        "twist_en": "the connection freezes and part of the comment is missed",
+        "twist_ko": "연결이 끊기면서 말의 일부를 놓친다",
+        "support_en": "the chat box and a few written notes",
+        "support_ko": "채팅창과 짧게 적어 둔 메모",
+        "choice_en": "asking for clarification, typing a key point, or smiling and moving on",
+        "choice_ko": "다시 설명해 달라고 하기, 핵심을 채팅으로 쓰기, 또는 웃고 넘어가기",
+        "stakes_en": "The conversation keeps moving, so timing matters",
+        "stakes_ko": "대화가 계속 이어져서 타이밍이 중요하다",
+    },
+    "Friendship": {
+        "topic_en": "Practice with a Friend",
+        "topic_ko": "친구와의 영어 연습",
+        "setting_en": "in a chat with a close friend",
+        "setting_ko": "친한 친구와의 채팅에서",
+        "context_en": "after dinner",
+        "context_ko": "저녁 식사 후에",
+        "task_en": "reply in English because a close friend wants to practice together",
+        "task_ko": "친한 친구와 함께 연습하려고 영어로 답하다",
+        "focus_en": "a close friend",
+        "focus_ko": "친한 친구",
+        "twist_en": "the friend asks a more personal follow-up question than expected",
+        "twist_ko": "친구가 생각보다 더 개인적인 추가 질문을 한다",
+        "support_en": "saved expressions and a short voice memo",
+        "support_ko": "저장해 둔 표현과 짧은 음성 메모",
+        "choice_en": "answering honestly with simple English, asking for time, or changing the topic",
+        "choice_ko": "쉬운 영어로 솔직하게 답하기, 시간을 좀 달라고 하기, 또는 화제를 바꾸기",
+        "stakes_en": "The friend is waiting for a real answer",
+        "stakes_ko": "친구는 진짜 답을 기다리고 있다",
+    },
+    "Club activity": {
+        "topic_en": "Club Plan",
+        "topic_ko": "동아리 계획",
+        "setting_en": "at an after-school club meeting",
+        "setting_ko": "방과 후 동아리 모임에서",
+        "context_en": "before the meeting ends",
+        "context_ko": "모임이 끝나기 전에",
+        "task_en": "explain an activity plan in English to mixed-level members",
+        "task_ko": "수준이 다른 동아리원들에게 활동 계획을 영어로 설명하다",
+        "focus_en": "the club members",
+        "focus_ko": "동아리원들",
+        "twist_en": "someone suggests a new idea that changes the plan",
+        "twist_ko": "누군가 새로운 아이디어를 내서 계획이 바뀐다",
+        "support_en": "a printed outline and a few key words",
+        "support_ko": "출력한 개요와 몇 개의 핵심 단어",
+        "choice_en": "keeping the original plan, adjusting the idea, or asking another member to help explain",
+        "choice_ko": "원래 계획을 유지하기, 아이디어를 조정하기, 또는 다른 구성원에게 설명을 도와달라고 하기",
+        "stakes_en": "The group needs a decision today",
+        "stakes_ko": "모둠은 오늘 결정을 내려야 한다",
+    },
+    "Test preparation": {
+        "topic_en": "Speaking Practice",
+        "topic_ko": "말하기 연습",
+        "setting_en": "during speaking-test practice",
+        "setting_ko": "말하기 시험 연습 중에",
+        "context_en": "right before the timer ends",
+        "context_ko": "타이머가 끝나기 직전에",
+        "task_en": "answer a sample speaking question in English",
+        "task_ko": "예시 말하기 질문에 영어로 답하다",
+        "focus_en": "a study partner",
+        "focus_ko": "스터디 파트너",
+        "twist_en": "the second question is harder and needs a personal example",
+        "twist_ko": "두 번째 질문이 더 어렵고 개인적인 예시가 필요하다",
+        "support_en": "a timer and a short checklist",
+        "support_ko": "타이머와 짧은 체크리스트",
+        "choice_en": "giving a short example, asking for a second to think, or stopping early",
+        "choice_ko": "짧은 예시를 말하기, 잠깐 생각할 시간을 요청하기, 또는 일찍 멈추기",
+        "stakes_en": "The practice time is almost over",
+        "stakes_ko": "연습 시간이 거의 끝나 간다",
+    },
+    "Self-study": {
+        "topic_en": "Recording Practice",
+        "topic_ko": "녹음 연습",
+        "setting_en": "alone at a desk after dinner",
+        "setting_ko": "저녁 식사 후 책상 앞에서 혼자",
+        "context_en": "late in the evening",
+        "context_ko": "늦은 저녁에",
+        "task_en": "record an English answer and upload it for feedback",
+        "task_ko": "영어 답변을 녹음해 피드백용으로 올리다",
+        "focus_en": "an online tutor",
+        "focus_ko": "온라인 튜터",
+        "twist_en": "the recorded answer sounds less clear than expected",
+        "twist_ko": "녹음한 답이 생각보다 덜 분명하게 들린다",
+        "support_en": "last week's correction sheet",
+        "support_ko": "지난주 교정지",
+        "choice_en": "recording again, fixing one problem at a time, or skipping the upload",
+        "choice_ko": "다시 녹음하기, 문제를 하나씩 고치기, 또는 업로드를 건너뛰기",
+        "stakes_en": "The upload deadline is tonight",
+        "stakes_ko": "업로드 마감은 오늘 밤이다",
+    },
+}
+
+FALLBACK_GENRE_TITLES = {
+    "Narrative story": {
+        "suffix_en": "Story",
+        "suffix_ko": "이야기",
+    },
+    "Dialogue": {
+        "suffix_en": "Dialogue",
+        "suffix_ko": "대화",
+    },
+    "Message/chat": {
+        "suffix_en": "Chat",
+        "suffix_ko": "채팅",
+    },
+    "Email": {
+        "suffix_en": "Email Draft",
+        "suffix_ko": "이메일 초안",
+    },
+    "Reflection journal": {
+        "suffix_en": "Journal Entry",
+        "suffix_ko": "성찰 일지",
+    },
+    "Problem situation": {
+        "suffix_en": "Problem",
+        "suffix_ko": "문제 상황",
+    },
+    "Short anecdote": {
+        "suffix_en": "Anecdote",
+        "suffix_ko": "짧은 일화",
+    },
+}
+
 
 # -----------------------------
 # Output and storage helpers
@@ -951,15 +1233,242 @@ def build_participant_signature(student_name: str, student_number: str) -> str:
     return f"{student_name.strip()}::{student_number.strip()}"
 
 
-def select_fallback_template(cefr_level: str, participant_signature: str, nonce: str) -> dict:
-    variants = FALLBACK_PASSAGE_VARIANTS_BY_LEVEL.get(
-        cefr_level,
-        FALLBACK_PASSAGE_VARIANTS_BY_LEVEL.get("A2", [FALLBACK_PASSAGES_BY_LEVEL["A2"]]),
-    )
-    hash_input = f"{cefr_level}|{participant_signature}|{nonce}"
+def deterministic_pick(options: list, *parts: str):
+    if not options:
+        raise ValueError("Options must not be empty.")
+
+    hash_input = "|".join(str(part) for part in parts)
     hash_value = hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
-    index = int(hash_value[:8], 16) % len(variants)
-    return deepcopy(variants[index])
+    index = int(hash_value[:8], 16) % len(options)
+    return options[index]
+
+
+def get_fallback_style_band(cefr_level: str) -> str:
+    if cefr_level == "A1":
+        return "basic"
+    if cefr_level == "A2":
+        return "basic_plus"
+    if cefr_level in {"B1", "B2"}:
+        return "intermediate"
+    return "advanced"
+
+
+def build_dynamic_fallback_title(character_name: str, selected_background: str, selected_genre: str) -> tuple:
+    scene = FALLBACK_BACKGROUND_CONFIGS.get(selected_background, FALLBACK_BACKGROUND_CONFIGS["Daily life"])
+    genre_info = FALLBACK_GENRE_TITLES.get(selected_genre, FALLBACK_GENRE_TITLES["Narrative story"])
+    story_title = f"{character_name}'s {scene['topic_en']} {genre_info['suffix_en']}"
+    story_title_ko = f"{character_name}의 {scene['topic_ko']} {genre_info['suffix_ko']}"
+    return story_title, story_title_ko
+
+
+def build_dynamic_fallback_sentences(
+    cefr_level: str,
+    character_name: str,
+    selected_background: str,
+    selected_genre: str,
+) -> tuple:
+    scene = FALLBACK_BACKGROUND_CONFIGS.get(selected_background, FALLBACK_BACKGROUND_CONFIGS["Daily life"])
+    band = get_fallback_style_band(cefr_level)
+
+    if selected_genre == "Dialogue":
+        open_en = [
+            f"{character_name} is {scene['setting_en']}, and an English conversation begins.",
+            f"At first, {character_name} only needs to {scene['task_en']}.",
+        ]
+        open_ko = [
+            f"{character_name}는 {scene['setting_ko']} 있고, 영어 대화가 시작된다.",
+            f"처음에는 {character_name}가 {scene['task_ko']} 하면 된다.",
+        ]
+        close_en = "Before the dialogue ends, {name} must choose the next line carefully."
+        close_ko = "{name}는 대화가 끝나기 전에 다음 말을 신중하게 골라야 한다."
+    elif selected_genre == "Message/chat":
+        open_en = [
+            f"{character_name} opens an English chat {scene['context_en']}.",
+            f"In the chat, {character_name} wants to {scene['task_en']}.",
+        ]
+        open_ko = [
+            f"{character_name}는 {scene['context_ko']} 영어 채팅을 연다.",
+            f"그 채팅에서 {character_name}는 {scene['task_ko']} 싶다.",
+        ]
+        close_en = "Before sending the next message, {name} must choose what to say."
+        close_ko = "{name}는 다음 메시지를 보내기 전에 무엇을 쓸지 정해야 한다."
+    elif selected_genre == "Email":
+        open_en = [
+            f"{character_name} starts a short email in English {scene['context_en']}.",
+            f"In the email, {character_name} wants to {scene['task_en']}.",
+        ]
+        open_ko = [
+            f"{character_name}는 {scene['context_ko']} 짧은 영어 이메일을 쓰기 시작한다.",
+            f"그 이메일에서 {character_name}는 {scene['task_ko']} 싶다.",
+        ]
+        close_en = "Before sending the email, {name} must choose the best way to continue."
+        close_ko = "{name}는 이메일을 보내기 전에 가장 좋은 다음 표현을 골라야 한다."
+    elif selected_genre == "Reflection journal":
+        open_en = [
+            f"{character_name} writes in a reflection journal {scene['context_en']}.",
+            f"In the journal, {character_name} describes a moment when it was necessary to {scene['task_en']}.",
+        ]
+        open_ko = [
+            f"{character_name}는 {scene['context_ko']} 성찰 일지에 글을 쓴다.",
+            f"그 일지에서 {character_name}는 {scene['task_ko']} 해야 했던 순간을 적는다.",
+        ]
+        close_en = "At the end of the journal, {name} decides what to try next."
+        close_ko = "{name}는 일지의 마지막에서 다음에 무엇을 해 볼지 정한다."
+    elif selected_genre == "Problem situation":
+        open_en = [
+            f"{character_name} faces a difficult English moment {scene['setting_en']}.",
+            f"The problem begins when {character_name} needs to {scene['task_en']}.",
+        ]
+        open_ko = [
+            f"{character_name}는 {scene['setting_ko']} 어려운 영어 상황을 마주한다.",
+            f"문제는 {character_name}가 {scene['task_ko']} 해야 하면서 시작된다.",
+        ]
+        close_en = "To get through the problem, {name} must choose the next step now."
+        close_ko = "{name}는 이 문제를 넘기기 위해 지금 다음 행동을 정해야 한다."
+    elif selected_genre == "Short anecdote":
+        open_en = [
+            f"It starts as a small English moment {scene['setting_en']}.",
+            f"{character_name} simply wants to {scene['task_en']}.",
+        ]
+        open_ko = [
+            f"이 일은 {scene['setting_ko']} 작은 영어 순간으로 시작된다.",
+            f"{character_name}는 그저 {scene['task_ko']} 싶다.",
+        ]
+        close_en = "That short moment leaves {name} thinking about the next time."
+        close_ko = "그 짧은 순간은 {name}가 다음번을 생각하게 만든다."
+    else:
+        open_en = [
+            f"{character_name} is {scene['setting_en']}.",
+            f"Today {character_name} needs to {scene['task_en']}.",
+        ]
+        open_ko = [
+            f"{character_name}는 {scene['setting_ko']} 있다.",
+            f"오늘 {character_name}는 {scene['task_ko']} 해야 한다.",
+        ]
+        close_en = "{name} must decide what to do next in English."
+        close_ko = "{name}는 영어로 다음에 무엇을 할지 결정해야 한다."
+
+    if band == "basic":
+        middle_en = [
+            f"{character_name} prepared a little, but {scene['twist_en']}.",
+            f"{character_name} understands part of the moment, but not all of it.",
+            f"{character_name} feels nervous and still wants to do well.",
+            "The other person is waiting for an answer.",
+            f"{character_name} looks at {scene['support_en']}.",
+            f"{character_name} thinks about {scene['choice_en']}.",
+            f"{scene['stakes_en']}.",
+        ]
+        middle_ko = [
+            f"{character_name}는 조금 준비했지만 {scene['twist_ko']}.",
+            f"{character_name}는 상황의 일부는 이해하지만 전부는 아니다.",
+            f"{character_name}는 긴장하지만 그래도 잘하고 싶다.",
+            "상대는 답을 기다리고 있다.",
+            f"{character_name}는 {scene['support_ko']} 다시 본다.",
+            f"{character_name}는 {scene['choice_ko']} 생각한다.",
+            f"{scene['stakes_ko']}.",
+        ]
+    elif band == "basic_plus":
+        middle_en = [
+            f"{character_name} practiced before, but {scene['twist_en']}.",
+            f"Because of that change, {character_name} is not sure which words will work best.",
+            f"{character_name} wants to respond well, yet the pressure grows quickly.",
+            "Part of the problem is English itself, and part of it is the fear of making a mistake.",
+            f"{character_name} checks {scene['support_en']} and tries to stay calm.",
+            f"{character_name} starts weighing {scene['choice_en']}.",
+            f"{scene['stakes_en']}.",
+        ]
+        middle_ko = [
+            f"{character_name}는 미리 연습했지만 {scene['twist_ko']}.",
+            f"그 변화 때문에 {character_name}는 어떤 말이 가장 맞을지 확신하지 못한다.",
+            f"{character_name}는 잘 답하고 싶지만 압박이 빨리 커진다.",
+            "문제의 일부는 영어 자체이고, 다른 일부는 실수할까 봐 걱정하는 마음이다.",
+            f"{character_name}는 {scene['support_ko']} 확인하며 침착하려고 한다.",
+            f"{character_name}는 {scene['choice_ko']} 저울질하기 시작한다.",
+            f"{scene['stakes_ko']}.",
+        ]
+    elif band == "intermediate":
+        middle_en = [
+            f"{character_name} expected a manageable task, but {scene['twist_en']}.",
+            f"That change makes {character_name} less sure about the right words and the right timing.",
+            f"{character_name} wants to sound clear and helpful, yet the pressure grows stronger.",
+            f"One part of the problem is the English itself, and another part is how this moment may look to {scene['focus_en']}.",
+            f"{character_name} returns to {scene['support_en']} and tries to organize the next step.",
+            f"While the moment keeps moving, {character_name} weighs {scene['choice_en']}.",
+            f"{scene['stakes_en']}.",
+        ]
+        middle_ko = [
+            f"{character_name}는 해낼 수 있는 과제라고 생각했지만 {scene['twist_ko']}.",
+            f"그 변화 때문에 {character_name}는 어떤 말과 어떤 타이밍이 맞는지 덜 확신하게 된다.",
+            f"{character_name}는 분명하고 도움이 되게 말하고 싶지만 압박은 더 강해진다.",
+            f"문제의 한 부분은 영어 자체이고, 다른 한 부분은 이 순간이 {scene['focus_ko']}에게 어떻게 보일지에 대한 걱정이다.",
+            f"{character_name}는 {scene['support_ko']} 돌아보며 다음 단계를 정리하려고 한다.",
+            f"상황이 계속 움직이는 동안 {character_name}는 {scene['choice_ko']} 따져 본다.",
+            f"{scene['stakes_ko']}.",
+        ]
+    else:
+        middle_en = [
+            f"{character_name} expected a manageable moment, but {scene['twist_en']}.",
+            f"That shift creates pressure because {character_name} wants to sound clear, capable, and natural in English.",
+            f"{character_name} can see several possible responses, yet each one carries a different risk.",
+            f"One concern is the immediate task, and another is what this moment may do to {character_name}'s confidence.",
+            f"{character_name} therefore returns to {scene['support_en']} and mentally reorganizes the situation.",
+            f"While the moment keeps moving, {character_name} weighs {scene['choice_en']}.",
+            f"{scene['stakes_en']}, and the next response may shape future English situations as well.",
+        ]
+        middle_ko = [
+            f"{character_name}는 감당할 수 있는 순간이라고 생각했지만 {scene['twist_ko']}.",
+            f"그 변화는 {character_name}가 영어로 분명하고 유능하며 자연스럽게 들리고 싶어 하기 때문에 더 큰 압박을 만든다.",
+            f"{character_name}는 가능한 대응이 몇 가지 있다는 것을 알지만, 각각 다른 위험을 안고 있다.",
+            f"한 가지 걱정은 눈앞의 과제이고, 또 다른 걱정은 이 순간이 {character_name}의 자신감에 미칠 영향이다.",
+            f"그래서 {character_name}는 {scene['support_ko']} 다시 보며 상황을 머릿속으로 정리한다.",
+            f"순간이 계속 흘러가는 동안 {character_name}는 {scene['choice_ko']} 저울질한다.",
+            f"{scene['stakes_ko']}, 그리고 다음 반응은 앞으로의 영어 상황에도 영향을 줄 수 있다.",
+        ]
+
+    passage_sentences = [*open_en, *middle_en, close_en.format(name=character_name)]
+    passage_ko_sentences = [*open_ko, *middle_ko, close_ko.format(name=character_name)]
+    return passage_sentences, passage_ko_sentences
+
+
+def select_fallback_template(
+    cefr_level: str,
+    participant_signature: str,
+    nonce: str,
+    selected_background: str,
+    selected_genre: str,
+) -> dict:
+    character_name = deterministic_pick(
+        FALLBACK_DYNAMIC_CHARACTER_NAMES,
+        cefr_level,
+        participant_signature,
+        nonce,
+        selected_background,
+        selected_genre,
+    )
+    scene = FALLBACK_BACKGROUND_CONFIGS.get(selected_background, FALLBACK_BACKGROUND_CONFIGS["Daily life"])
+    story_title, story_title_ko = build_dynamic_fallback_title(
+        character_name=character_name,
+        selected_background=selected_background,
+        selected_genre=selected_genre,
+    )
+    passage_sentences, passage_ko_sentences = build_dynamic_fallback_sentences(
+        cefr_level=cefr_level,
+        character_name=character_name,
+        selected_background=selected_background,
+        selected_genre=selected_genre,
+    )
+
+    return {
+        "story_title": story_title,
+        "story_title_ko": story_title_ko,
+        "central_characters": character_name,
+        "character_focus": character_name,
+        "situation_focus": f"{character_name} and {scene['focus_en']}",
+        "relationship_focus": f"{character_name} and {scene['focus_en']}",
+        "relationship_focus_ko": f"{character_name}와 {scene['focus_ko']}",
+        "passage_sentences": passage_sentences,
+        "passage_ko_sentences": passage_ko_sentences,
+    }
 
 
 def normalize_prompt_map(payload: dict) -> dict:
@@ -1004,8 +1513,8 @@ def normalize_sentence_payload(payload: dict, key: str) -> list:
         raise ValueError(f"{key} must be a list.")
 
     sentences = [str(item).strip() for item in value if str(item).strip()]
-    if len(sentences) not in {5, 6}:
-        raise ValueError(f"{key} must contain 5 or 6 sentences.")
+    if len(sentences) != TARGET_PASSAGE_SENTENCE_COUNT:
+        raise ValueError(f"{key} must contain exactly {TARGET_PASSAGE_SENTENCE_COUNT} sentences.")
 
     return sentences
 
@@ -1031,12 +1540,12 @@ def build_rule_based_prompt_map(questionnaire: dict) -> dict:
 
     return {
         "q1": {
-            "prompt": f"What happens between {relationship_focus} in this passage? Explain the situation in your own words.",
-            "prompt_ko": f"이 지문에서 {relationship_focus_ko} 사이에 어떤 일이 일어나나요? 자신의 말로 상황을 설명해 보세요.",
+            "prompt": f"What happens in this passage involving {relationship_focus}? Explain the situation in your own words.",
+            "prompt_ko": f"이 지문에서 {relationship_focus_ko}와 관련해 어떤 일이 일어나나요? 자신의 말로 상황을 설명해 보세요.",
         },
         "q2": {
-            "prompt": "Which detail is the most important for understanding this situation? Explain why that detail matters.",
-            "prompt_ko": "이 상황을 이해하는 데 가장 중요한 세부 내용은 무엇인가요? 왜 중요한지도 설명해 보세요.",
+            "prompt": "Which detail or turning point is most important for understanding this situation? Explain why it matters.",
+            "prompt_ko": "이 상황을 이해하는 데 가장 중요한 세부 내용이나 전환점은 무엇인가요? 왜 중요한지도 설명해 보세요.",
         },
         "q3": {
             "prompt": f"How does {character_focus} feel in this situation? What detail in the passage shows that feeling?",
@@ -1044,11 +1553,11 @@ def build_rule_based_prompt_map(questionnaire: dict) -> dict:
         },
         "q4": {
             "prompt": (
-                "In a similar situation in English class, how would you feel? "
+                "In a similar situation in your own life, how would you feel? "
                 "Would you feel nervous, comfortable, interested, happy, or something else? Explain why."
             ),
             "prompt_ko": (
-                "영어 수업에서 비슷한 상황이라면 어떤 기분이 들까요? "
+                "당신의 삶에서 비슷한 상황이라면 어떤 기분이 들까요? "
                 "긴장되는지, 편안한지, 흥미로운지, 행복한지, 또는 다른 감정이 드는지와 그 이유를 설명해 보세요."
             ),
         },
@@ -1058,11 +1567,11 @@ def build_rule_based_prompt_map(questionnaire: dict) -> dict:
         },
         "q6": {
             "prompt": (
-                "In a similar situation in English class, what would you think about your English ability? "
+                "In a similar situation in your own life, what would you think about your own ability? "
                 "How would you notice your problem and try to manage it?"
             ),
             "prompt_ko": (
-                "영어 수업에서 비슷한 상황이라면 자신의 영어 능력에 대해 어떤 생각이 들까요? "
+                "당신의 삶에서 비슷한 상황이라면 자신의 능력에 대해 어떤 생각이 들까요? "
                 "자신의 문제를 어떻게 알아차리고 관리하려고 할지도 설명해 보세요."
             ),
         },
@@ -1072,11 +1581,11 @@ def build_rule_based_prompt_map(questionnaire: dict) -> dict:
         },
         "q8": {
             "prompt": (
-                "In a similar situation in English class, what would you do? "
+                "In a similar situation in your own life, what would you do? "
                 "Would you speak, stay quiet, ask for help, prepare more, practice more, or avoid it? Explain."
             ),
             "prompt_ko": (
-                "영어 수업에서 비슷한 상황이라면 어떻게 행동할까요? "
+                "당신의 삶에서 비슷한 상황이라면 어떻게 행동할까요? "
                 "말하려고 하는지, 조용히 있는지, 도움을 요청하는지, 더 준비하거나 연습하는지, 또는 피하려고 하는지 설명해 보세요."
             ),
         },
@@ -1086,11 +1595,11 @@ def build_rule_based_prompt_map(questionnaire: dict) -> dict:
         },
         "q10": {
             "prompt": (
-                "In a similar situation in English class, what strategy would help you most? "
+                "In a similar situation in your own life, what strategy would help you most? "
                 "Explain what you would do and how it helps you."
             ),
             "prompt_ko": (
-                "영어 수업에서 비슷한 상황이라면 어떤 전략이 가장 도움이 될까요? "
+                "당신의 삶에서 비슷한 상황이라면 어떤 전략이 가장 도움이 될까요? "
                 "무엇을 할 것인지와 그것이 어떻게 도움이 되는지 설명해 보세요."
             ),
         },
@@ -1101,12 +1610,16 @@ def build_fallback_experiment(
     cefr_level: str,
     participant_signature: str,
     nonce: str,
+    selected_background: str,
+    selected_genre: str,
     reason: str,
 ) -> dict:
     template = select_fallback_template(
         cefr_level=cefr_level,
         participant_signature=participant_signature,
         nonce=nonce,
+        selected_background=selected_background,
+        selected_genre=selected_genre,
     )
     questionnaire = dict(template)
     questionnaire["id"] = "cefr_dynamic"
@@ -1121,17 +1634,21 @@ def build_fallback_experiment(
         "짧은 답변도 가능하며, 더 길게 써도 됩니다."
     )
     questionnaire["cefr_level"] = cefr_level
+    questionnaire["central_characters"] = template.get("central_characters", template["character_focus"])
     questionnaire["text"] = format_passage_markdown(template["story_title"], template["passage_sentences"])
     questionnaire["text_ko"] = format_passage_markdown(template["story_title_ko"], template["passage_ko_sentences"])
     questionnaire["passage_plain"] = " ".join(template["passage_sentences"])
     questionnaire["passage_ko_plain"] = " ".join(template["passage_ko_sentences"])
     questionnaire["passage_sentences"] = list(template["passage_sentences"])
     questionnaire["passage_ko_sentences"] = list(template["passage_ko_sentences"])
+    questionnaire["selected_background"] = selected_background
+    questionnaire["selected_genre"] = selected_genre
     questionnaire["sections"] = apply_prompt_map_to_sections(build_rule_based_prompt_map(questionnaire))
     questionnaire["question_source"] = "rule_based"
     questionnaire["question_model"] = ""
     questionnaire["question_generation_note"] = (
-        f"{reason} Selected fallback scenario: {template['story_title']}."
+        f"{reason} Built-in fallback passage '{template['story_title']}' was created "
+        f"for background '{selected_background}' and genre '{selected_genre}'."
     )
     return questionnaire
 
@@ -1139,9 +1656,15 @@ def build_fallback_experiment(
 def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
     story_title = str(payload.get("story_title", "")).strip()
     story_title_ko = str(payload.get("story_title_ko", "")).strip()
-    character_focus = str(payload.get("character_focus", "")).strip()
-    relationship_focus = str(payload.get("relationship_focus", "")).strip()
-    relationship_focus_ko = str(payload.get("relationship_focus_ko", "")).strip()
+    character_focus = str(
+        payload.get("central_characters", "") or payload.get("character_focus", "")
+    ).strip()
+    relationship_focus = str(
+        payload.get("situation_focus", "") or payload.get("relationship_focus", "")
+    ).strip()
+    relationship_focus_ko = str(
+        payload.get("situation_focus_ko", "") or payload.get("relationship_focus_ko", "")
+    ).strip()
 
     if not all([story_title, story_title_ko, character_focus, relationship_focus, relationship_focus_ko]):
         raise ValueError("The model returned an incomplete experiment header.")
@@ -1156,7 +1679,9 @@ def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
         "page_title_ko": "CEFR 상호작용 진단",
         "story_title": story_title,
         "story_title_ko": story_title_ko,
+        "central_characters": character_focus,
         "character_focus": character_focus,
+        "situation_focus": relationship_focus,
         "relationship_focus": relationship_focus,
         "relationship_focus_ko": relationship_focus_ko,
         "intro": (
@@ -1170,6 +1695,8 @@ def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
         "cefr_level": cefr_level,
         "passage_sentences": passage_sentences,
         "passage_ko_sentences": passage_ko_sentences,
+        "selected_background": "",
+        "selected_genre": "",
         "text": format_passage_markdown(story_title, passage_sentences),
         "text_ko": format_passage_markdown(story_title_ko, passage_ko_sentences),
         "passage_plain": " ".join(passage_sentences),
@@ -1185,6 +1712,8 @@ def generate_experiment_with_openai(
     student_name: str,
     student_number: str,
     variation_seed: str,
+    selected_background: str,
+    selected_genre: str,
     api_key: str,
     model: str,
 ) -> dict:
@@ -1196,16 +1725,19 @@ You design one bilingual CEFR-based reading-and-response experiment for an Engli
 Return valid JSON only.
 
 Requirements:
-- Create one short passage with exactly 5 or 6 English sentences.
+- Create one passage with exactly 10 English sentences.
 - Match the CEFR level requested by the user.
-- Use one clear main character and one meaningful classroom, speaking, presentation, discussion, or communication situation.
+- Use one or two clear central characters in one meaningful situation with emotional, social, or decision-making stakes.
+- The passage can be about English learning or any broader real-life situation, as long as it supports emotionally and cognitively meaningful responses and gives enough context for evaluating fluency, emotion, cognition, behavior, and strategy through the follow-up questions.
+- The selected personal background and selected genre are mandatory constraints, not optional hints.
+- Structure the passage with a clear beginning, development, turning point, and closing outcome or reflection.
 - Create a fresh scenario for this participant and avoid repeating the same stock situation across different students.
-- Do not default to a Mina presentation scenario unless it is genuinely necessary.
 - Make the situation rich enough to support emotion, cognition, behavior, and strategy evaluation.
 - Create exactly 10 student-facing questions with ids q1 to q10.
-- Make the questions interactive, specific, and learner-friendly.
+- Make the questions interactive, specific, learner-friendly, and natural enough to sound like real student prompts instead of a psychology checklist.
+- Make the questions open enough to reveal fluency features such as sentence length, connector use, structure complexity, organization, and strategy expression.
 - Include depth 2 by making the second question in each section meaningfully deeper than the first.
-- Keep self questions explicitly connected to English class.
+- Keep self questions clearly connected to the learner's own feelings, thoughts, actions, or strategies in a similar situation.
 - Do not use technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or Oxford strategy type in the student-facing questions.
 - Make the Korean translations natural and faithful.
 """
@@ -1215,8 +1747,17 @@ Target CEFR level: {cefr_level}
 Participant name: {student_name}
 Participant number: {student_number}
 Variation seed: {variation_seed}
+Selected personal background: {selected_background}
+Selected genre: {selected_genre}
 
 Create a noticeably different passage across participants when possible.
+
+Design guidance:
+- Respect the selected background and genre throughout the passage.
+- The passage can be about English learning or any broader real-life situation, as long as it contains clear feelings, thoughts, decisions, and coping or strategy opportunities.
+- Let the 10 sentences move through introduction, development, tension or decision, and ending.
+- Make the questions useful for evaluation, but phrase them naturally for students.
+- Give students room to show fluency through connected explanation, not only through one-word or one-phrase answers.
 
 Evaluation criteria:
 {QUESTION_GENERATION_CRITERIA}
@@ -1228,11 +1769,11 @@ Return JSON only in this format:
 {{
   "story_title": "...",
   "story_title_ko": "...",
-  "character_focus": "...",
-  "relationship_focus": "...",
-  "relationship_focus_ko": "...",
-  "passage_sentences": ["...", "...", "...", "...", "..."],
-  "passage_ko_sentences": ["...", "...", "...", "...", "..."],
+  "central_characters": "...",
+  "situation_focus": "...",
+  "situation_focus_ko": "...",
+  "passage_sentences": ["...", "...", "...", "...", "...", "...", "...", "...", "...", "..."],
+  "passage_ko_sentences": ["...", "...", "...", "...", "...", "...", "...", "...", "...", "..."],
   "questions": [
     {{"id": "q1", "prompt": "....", "prompt_ko": "...."}},
     {{"id": "q2", "prompt": "....", "prompt_ko": "...."}},
@@ -1259,9 +1800,14 @@ Return JSON only in this format:
     response_text = completion.choices[0].message.content or ""
     payload = extract_json_object(response_text)
     questionnaire = normalize_experiment_payload(payload, cefr_level)
+    questionnaire["selected_background"] = selected_background
+    questionnaire["selected_genre"] = selected_genre
     questionnaire["question_source"] = "openai"
     questionnaire["question_model"] = model
-    questionnaire["question_generation_note"] = "Passage and interactive questions were generated with OpenAI."
+    questionnaire["question_generation_note"] = (
+        "Passage and interactive questions were generated with OpenAI "
+        f"for background '{selected_background}' and genre '{selected_genre}'."
+    )
     return questionnaire
 
 
@@ -1270,6 +1816,8 @@ def build_generated_experiment(
     cefr_level: str,
     student_name: str,
     student_number: str,
+    selected_background: str,
+    selected_genre: str,
     api_key: str,
     model: str,
     nonce: str,
@@ -1281,6 +1829,8 @@ def build_generated_experiment(
             cefr_level=cefr_level,
             participant_signature=participant_signature,
             nonce=nonce,
+            selected_background=selected_background,
+            selected_genre=selected_genre,
             reason="OpenAI API key is not configured, so the app is using a built-in fallback passage and question set.",
         )
 
@@ -1290,6 +1840,8 @@ def build_generated_experiment(
             student_name=student_name,
             student_number=student_number,
             variation_seed=nonce[:12],
+            selected_background=selected_background,
+            selected_genre=selected_genre,
             api_key=api_key,
             model=model,
         )
@@ -1298,6 +1850,8 @@ def build_generated_experiment(
             cefr_level=cefr_level,
             participant_signature=participant_signature,
             nonce=nonce,
+            selected_background=selected_background,
+            selected_genre=selected_genre,
             reason="OpenAI generation failed, so the app is using a built-in fallback passage and question set.",
         )
 
@@ -1348,7 +1902,7 @@ def word_count(text: str) -> int:
 def sentence_count(text: str) -> int:
     if not text:
         return 0
-    sentences = re.split(r"\.+", text.strip())
+    sentences = re.split(r"[.!?]+", text.strip())
     sentences = [sentence for sentence in sentences if sentence.strip()]
     return len(sentences)
 
@@ -1554,7 +2108,7 @@ def generate_personalized_self_prompt_with_openai(
 You generate one interactive follow-up question for an English-education diagnostic app.
 Return valid JSON only.
 The question must be the second question in a part and must clearly connect to the learner's answer to the first question.
-If the follow-up question type is Self, it must move into the learner's own experience in English class.
+If the follow-up question type is Self, it must move into the learner's own experience in a similar real-life situation.
 If the follow-up question type is Depth 2, it must stay focused on the passage and deepen the learner's reasoning.
 Use simple, learner-friendly English.
 Do not mention technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or strategy type.
@@ -1707,16 +2261,292 @@ def detect_connectors(text: str) -> list:
     ]
 
 
-def fluency_label(text: str) -> str:
+def detect_structure_markers(text: str) -> list:
+    if not text:
+        return []
+
+    lower_text = text.lower()
+    candidates = [
+        "because",
+        "when",
+        "if",
+        "while",
+        "although",
+        "though",
+        "before",
+        "after",
+        "so that",
+        "which",
+        "who",
+        "that",
+    ]
+
+    return [
+        marker
+        for marker in candidates
+        if re.search(rf"\b{re.escape(marker)}\b", lower_text)
+    ]
+
+
+def detect_organization_markers(text: str) -> list:
+    if not text:
+        return []
+
+    lower_text = text.lower()
+    candidates = [
+        "first",
+        "next",
+        "then",
+        "later",
+        "after that",
+        "finally",
+        "in the end",
+        "at first",
+        "for example",
+        "for instance",
+        "also",
+    ]
+
+    return [
+        marker
+        for marker in candidates
+        if re.search(rf"\b{re.escape(marker)}\b", lower_text)
+    ]
+
+
+def detect_strategy_expressions(text: str) -> list:
+    if not text:
+        return []
+
+    lower_text = text.lower()
+    candidates = [
+        "try",
+        "plan",
+        "practice",
+        "prepare",
+        "ask",
+        "check",
+        "use",
+        "change",
+        "solve",
+        "fix",
+        "explain",
+        "decide",
+        "manage",
+        "review",
+        "repeat",
+        "calm down",
+    ]
+
+    return [
+        marker
+        for marker in candidates
+        if re.search(rf"\b{re.escape(marker)}\b", lower_text)
+    ]
+
+
+def score_to_label(score: float) -> str:
+    if score >= 1.4:
+        return "High"
+    if score >= 0.6:
+        return "Mid"
+    return "Low"
+
+
+def label_to_score(label: str) -> int:
+    return {"Low": 0, "Mid": 1, "High": 2}.get(label, 0)
+
+
+def analyze_fluency_features(text: str) -> dict:
     wc = word_count(text)
     sc = sentence_count(text)
     connectors = detect_connectors(text)
+    structure_markers = detect_structure_markers(text)
+    organization_markers = detect_organization_markers(text)
+    strategy_expressions = detect_strategy_expressions(text)
 
-    if wc >= 18 and sc >= 2 and len(connectors) >= 2:
-        return "High"
-    if wc >= 8 and sc >= 2 and len(connectors) >= 1:
-        return "Mid"
-    return "Low"
+    avg_sentence_length = wc / sc if sc else 0.0
+
+    if wc >= 18 or (sc >= 2 and avg_sentence_length >= 9):
+        sentence_length_label = "High"
+    elif wc >= 8 or avg_sentence_length >= 5:
+        sentence_length_label = "Mid"
+    else:
+        sentence_length_label = "Low"
+
+    if len(connectors) >= 2:
+        connector_label = "High"
+    elif len(connectors) >= 1:
+        connector_label = "Mid"
+    else:
+        connector_label = "Low"
+
+    if len(structure_markers) >= 2 or (sc >= 2 and len(connectors) >= 2):
+        structure_label = "High"
+    elif len(structure_markers) >= 1 or sc >= 2:
+        structure_label = "Mid"
+    else:
+        structure_label = "Low"
+
+    if len(organization_markers) >= 2:
+        organization_label = "High"
+    elif len(organization_markers) >= 1:
+        organization_label = "Mid"
+    else:
+        organization_label = "Low"
+
+    if len(strategy_expressions) >= 2:
+        strategy_label = "High"
+    elif len(strategy_expressions) >= 1:
+        strategy_label = "Mid"
+    else:
+        strategy_label = "Low"
+
+    non_low_feature_count = sum(
+        label != "Low"
+        for label in [
+            sentence_length_label,
+            connector_label,
+            structure_label,
+            organization_label,
+            strategy_label,
+        ]
+    )
+    high_feature_count = sum(
+        label == "High"
+        for label in [
+            sentence_length_label,
+            connector_label,
+            structure_label,
+            organization_label,
+            strategy_label,
+        ]
+    )
+
+    if (
+        sentence_length_label != "Low"
+        and connector_label != "Low"
+        and non_low_feature_count >= 4
+        and high_feature_count >= 2
+    ):
+        overall_label = "High"
+    elif sentence_length_label != "Low" and non_low_feature_count >= 2:
+        overall_label = "Mid"
+    else:
+        overall_label = "Low"
+
+    return {
+        "word_count": wc,
+        "sentence_count": sc,
+        "avg_sentence_length": round(avg_sentence_length, 2),
+        "connectors": connectors,
+        "structure_markers": structure_markers,
+        "organization_markers": organization_markers,
+        "strategy_expressions": strategy_expressions,
+        "sentence_length_label": sentence_length_label,
+        "connector_label": connector_label,
+        "structure_label": structure_label,
+        "organization_label": organization_label,
+        "strategy_label": strategy_label,
+        "overall_label": overall_label,
+    }
+
+
+def fluency_label(text: str) -> str:
+    return analyze_fluency_features(text)["overall_label"]
+
+
+def evaluate_fluency(answers: dict) -> dict:
+    analyses = [
+        analyze_fluency_features(answer)
+        for answer in answers.values()
+        if answer.strip()
+    ]
+
+    if not analyses:
+        return {
+            "Fluency": "Low",
+            "Fluency_sentence_length": "Low",
+            "Fluency_connector_use": "Low",
+            "Fluency_structure_complexity": "Low",
+            "Fluency_organization": "Low",
+            "Fluency_strategy_expression": "Low",
+            "Fluency_state": (
+                "Fluency: Low / Sentence length: Low / Connector use: Low / "
+                "Structure complexity: Low / Organization: Low / Strategy expression: Low"
+            ),
+            "Fluency_connector_examples": "",
+            "Fluency_feature_note": "No usable responses were available for fluency analysis.",
+        }
+
+    def average_feature(feature_key: str) -> float:
+        return sum(label_to_score(item[feature_key]) for item in analyses) / len(analyses)
+
+    sentence_length_label = score_to_label(average_feature("sentence_length_label"))
+    connector_label = score_to_label(average_feature("connector_label"))
+    structure_label = score_to_label(average_feature("structure_label"))
+    organization_label = score_to_label(average_feature("organization_label"))
+    strategy_label = score_to_label(average_feature("strategy_label"))
+
+    averaged_non_low = sum(
+        label != "Low"
+        for label in [
+            sentence_length_label,
+            connector_label,
+            structure_label,
+            organization_label,
+            strategy_label,
+        ]
+    )
+    averaged_high = sum(
+        label == "High"
+        for label in [
+            sentence_length_label,
+            connector_label,
+            structure_label,
+            organization_label,
+            strategy_label,
+        ]
+    )
+
+    if (
+        sentence_length_label != "Low"
+        and connector_label != "Low"
+        and averaged_non_low >= 4
+        and averaged_high >= 2
+    ):
+        overall_label = "High"
+    elif sentence_length_label != "Low" and averaged_non_low >= 2:
+        overall_label = "Mid"
+    else:
+        overall_label = "Low"
+
+    connector_examples = sorted(
+        {
+            connector
+            for item in analyses
+            for connector in item["connectors"]
+        }
+    )
+
+    return {
+        "Fluency": overall_label,
+        "Fluency_sentence_length": sentence_length_label,
+        "Fluency_connector_use": connector_label,
+        "Fluency_structure_complexity": structure_label,
+        "Fluency_organization": organization_label,
+        "Fluency_strategy_expression": strategy_label,
+        "Fluency_state": (
+            f"Fluency: {overall_label} / Sentence length: {sentence_length_label} / "
+            f"Connector use: {connector_label} / Structure complexity: {structure_label} / "
+            f"Organization: {organization_label} / Strategy expression: {strategy_label}"
+        ),
+        "Fluency_connector_examples": ", ".join(connector_examples),
+        "Fluency_feature_note": (
+            "Based on sentence length, connector use, structure complexity, "
+            "organization, and strategy expression across the learner's responses."
+        ),
+    }
 
 
 def classify_fla_fle(text: str) -> tuple:
@@ -2029,13 +2859,23 @@ def classify_strategy(text: str) -> tuple:
 
 
 def evaluate_state(answers: dict) -> dict:
+    fluency = evaluate_fluency(answers)
     fla, fle = classify_fla_fle(answers.get("q4", ""))
     self_efficacy, metacognition = classify_self_efficacy_metacognition(answers.get("q6", ""))
     wtc, coping, engagement = classify_behavior(answers.get("q8", ""))
     strategy_type, strategy_quality = classify_strategy(answers.get("q10", ""))
 
     return {
-        "evaluation_method": "criteria_rules_v2_dynamic_cefr",
+        "evaluation_method": "criteria_rules_v3_dynamic_cefr",
+        "Fluency": fluency["Fluency"],
+        "Fluency_sentence_length": fluency["Fluency_sentence_length"],
+        "Fluency_connector_use": fluency["Fluency_connector_use"],
+        "Fluency_structure_complexity": fluency["Fluency_structure_complexity"],
+        "Fluency_organization": fluency["Fluency_organization"],
+        "Fluency_strategy_expression": fluency["Fluency_strategy_expression"],
+        "Fluency_state": fluency["Fluency_state"],
+        "Fluency_connector_examples": fluency["Fluency_connector_examples"],
+        "Fluency_feature_note": fluency["Fluency_feature_note"],
         "FLA": fla,
         "FLE": fle,
         "Emotion_state": f"FLA: {fla} / FLE: {fle}",
@@ -2082,9 +2922,14 @@ def build_response_row(
         "student_name": student_name,
         "student_number": student_number,
         "cefr_level": cefr_level,
+        "selected_background": questionnaire.get("selected_background", ""),
+        "selected_genre": questionnaire.get("selected_genre", ""),
         "questionnaire_id": questionnaire["id"],
         "questionnaire_title": questionnaire["page_title"],
         "questionnaire_title_ko": questionnaire["page_title_ko"],
+        "central_characters": questionnaire.get("central_characters", questionnaire.get("character_focus", "")),
+        "situation_focus": questionnaire.get("situation_focus", questionnaire.get("relationship_focus", "")),
+        "situation_focus_ko": questionnaire.get("relationship_focus_ko", ""),
         "story_title": questionnaire["story_title"],
         "story_title_ko": questionnaire.get("story_title_ko", ""),
         "passage_text": questionnaire.get("passage_plain", ""),
@@ -2095,7 +2940,7 @@ def build_response_row(
         "total_questions": len(get_all_questions(questionnaire)),
         "minimum_sentences_required": MIN_SENTENCES,
         "recommended_sentences": RECOMMENDED_SENTENCES,
-        "sentence_count_rule": "A sentence is counted only when it ends with a period (.)",
+        "sentence_count_rule": "A sentence is counted when it ends with ., !, or ?, and an unpunctuated response is treated as one sentence.",
     }
 
     for question in get_all_questions(questionnaire):
@@ -2131,13 +2976,28 @@ def build_evaluation_row(
         "student_name": student_name,
         "student_number": student_number,
         "cefr_level": cefr_level,
+        "selected_background": questionnaire.get("selected_background", ""),
+        "selected_genre": questionnaire.get("selected_genre", ""),
         "questionnaire_id": questionnaire["id"],
         "questionnaire_title": questionnaire["page_title"],
         "questionnaire_title_ko": questionnaire["page_title_ko"],
+        "central_characters": questionnaire.get("central_characters", questionnaire.get("character_focus", "")),
+        "situation_focus": questionnaire.get("situation_focus", questionnaire.get("relationship_focus", "")),
+        "situation_focus_ko": questionnaire.get("relationship_focus_ko", ""),
         "story_title": questionnaire["story_title"],
         "question_source": questionnaire.get("question_source", "rule_based"),
         "question_model": questionnaire.get("question_model", ""),
         "evaluation_method": evaluation["evaluation_method"],
+        "fluency_layer": "Cross-question",
+        "Fluency": evaluation["Fluency"],
+        "Fluency_sentence_length": evaluation["Fluency_sentence_length"],
+        "Fluency_connector_use": evaluation["Fluency_connector_use"],
+        "Fluency_structure_complexity": evaluation["Fluency_structure_complexity"],
+        "Fluency_organization": evaluation["Fluency_organization"],
+        "Fluency_strategy_expression": evaluation["Fluency_strategy_expression"],
+        "Fluency_state": evaluation["Fluency_state"],
+        "Fluency_connector_examples": evaluation["Fluency_connector_examples"],
+        "Fluency_feature_note": evaluation["Fluency_feature_note"],
         "emotion_layer": "Emotion",
         "FLA": evaluation["FLA"],
         "FLE": evaluation["FLE"],
@@ -2162,13 +3022,23 @@ def build_evaluation_row(
     }
 
 
-def validate_participant_inputs(student_name: str, student_number: str, cefr_level: str) -> str:
+def validate_participant_inputs(
+    student_name: str,
+    student_number: str,
+    cefr_level: str,
+    selected_background: str,
+    selected_genre: str,
+) -> str:
     if not student_name.strip():
         return "Please enter Name / 이름을 입력해주세요."
     if not student_number.strip():
         return "Please enter Student Number / 학번을 입력해주세요."
     if cefr_level not in CEFR_LEVEL_OPTIONS:
         return "Please choose a CEFR level / CEFR 레벨을 선택해주세요."
+    if selected_background not in BACKGROUND_OPTIONS:
+        return "Please choose a background / 배경을 선택해주세요."
+    if selected_genre not in GENRE_OPTIONS:
+        return "Please choose a genre / 장르를 선택해주세요."
     return ""
 
 
@@ -2215,9 +3085,13 @@ def initialize_session_state():
         "student_name_input": "",
         "student_number_input": "",
         "cefr_level_input": "A2",
+        "selected_background_input": "Daily life",
+        "selected_genre_input": "Narrative story",
         "student_name_value": "",
         "student_number_value": "",
         "cefr_level_value": "",
+        "selected_background_value": "",
+        "selected_genre_value": "",
         "active_questionnaire": {},
         "saved_answers": {},
         "current_section_index": 0,
@@ -2255,9 +3129,13 @@ def reset_session_state():
         "student_name_input",
         "student_number_input",
         "cefr_level_input",
+        "selected_background_input",
+        "selected_genre_input",
         "student_name_value",
         "student_number_value",
         "cefr_level_value",
+        "selected_background_value",
+        "selected_genre_value",
         "active_questionnaire",
         "saved_answers",
         "current_section_index",
@@ -2653,7 +3531,7 @@ def render_page_header():
         """
         <div class="hero-title">CEFR Interactive Diagnostic</div>
         <div class="hero-subtitle">
-            Generate one CEFR-level passage with interactive state-evaluation questions, keep the passage visible on the left,
+            Generate one CEFR-level passage that follows the participant's selected background and genre, keep the passage visible on the left,
             and let participants move part by part through adaptive follow-up questions.
         </div>
         """,
@@ -2676,7 +3554,7 @@ def render_participant_header():
         <div class="participant-shell">
             <div class="participant-title">Participant Setup</div>
             <div class="participant-subtitle">
-                이름, 학번, CEFR 레벨을 먼저 입력한 뒤 지문과 질문을 생성하세요. 생성 이후 CEFR을 바꾸면 다시 생성해야 새 실험 세트가 반영됩니다.
+                이름, 학번, CEFR 레벨, 배경, 장르를 먼저 선택한 뒤 지문과 질문을 생성하세요. 생성 이후 참가자 정보나 선택값을 바꾸면 다시 생성해야 새 실험 세트가 반영됩니다.
             </div>
         </div>
         """,
@@ -2690,8 +3568,8 @@ def render_placeholder():
         <div class="placeholder-shell">
             <div class="panel-title">Ready to Build the Experiment</div>
             <div class="panel-subtitle">
-                Enter the participant profile above, then click <b>Generate Passage &amp; Questions</b>.
-                The app will create a CEFR-level passage, then run the questionnaire part by part with adaptive follow-up questions.
+                Enter the participant profile, preferred background, and genre above, then click <b>Generate Passage &amp; Questions</b>.
+                The app will create a CEFR-level passage that follows those choices, then run the questionnaire part by part with adaptive follow-up questions.
             </div>
         </div>
         """,
@@ -2768,6 +3646,8 @@ def render_passage_panel(questionnaire: dict, student_name: str, student_number:
                 <span class="meta-chip">Name: {html.escape(student_name)}</span>
                 <span class="meta-chip">Student No: {html.escape(student_number)}</span>
                 <span class="meta-chip">CEFR: {html.escape(cefr_level)}</span>
+                <span class="meta-chip">Background: {html.escape(questionnaire.get("selected_background", ""))}</span>
+                <span class="meta-chip">Genre: {html.escape(questionnaire.get("selected_genre", ""))}</span>
             </div>
             <div class="passage-block">
                 <h4>English Passage</h4>
@@ -2813,6 +3693,8 @@ if st.session_state.submission_complete:
     st.write(f"Name / 이름: `{st.session_state.student_name_value}`")
     st.write(f"Student Number / 학번: `{st.session_state.student_number_value}`")
     st.write(f"CEFR Level: `{st.session_state.cefr_level_value}`")
+    st.write(f"Background / 배경: `{st.session_state.selected_background_value}`")
+    st.write(f"Genre / 장르: `{st.session_state.selected_genre_value}`")
     st.write(f"Submission ID: `{st.session_state.last_submission_id}`")
     st.write(f"Storage backend: `{st.session_state.last_storage_backend}`")
     st.write(f"Responses destination: `{st.session_state.last_response_file}`")
@@ -2826,7 +3708,8 @@ if st.session_state.submission_complete:
 
 render_participant_header()
 
-name_col, number_col, cefr_col, button_col = st.columns([1.1, 1.1, 0.8, 0.9], gap="small")
+name_col, number_col, cefr_col = st.columns([1.1, 1.1, 0.8], gap="small")
+background_col, genre_col, button_col = st.columns([1.0, 1.0, 0.9], gap="small")
 
 with name_col:
     st.text_input(
@@ -2849,6 +3732,20 @@ with cefr_col:
         key="cefr_level_input",
     )
 
+with background_col:
+    st.selectbox(
+        "Preferred Background / 배경",
+        options=BACKGROUND_OPTIONS,
+        key="selected_background_input",
+    )
+
+with genre_col:
+    st.selectbox(
+        "Text Genre / 장르",
+        options=GENRE_OPTIONS,
+        key="selected_genre_input",
+    )
+
 with button_col:
     st.write("")
     generate_clicked = st.button("Generate Passage & Questions", use_container_width=True)
@@ -2857,6 +3754,8 @@ participant_error = validate_participant_inputs(
     student_name=st.session_state.student_name_input,
     student_number=st.session_state.student_number_input,
     cefr_level=st.session_state.cefr_level_input,
+    selected_background=st.session_state.selected_background_input,
+    selected_genre=st.session_state.selected_genre_input,
 )
 
 if generate_clicked:
@@ -2872,6 +3771,8 @@ if generate_clicked:
                 cefr_level=st.session_state.cefr_level_input,
                 student_name=st.session_state.student_name_input.strip(),
                 student_number=st.session_state.student_number_input.strip(),
+                selected_background=st.session_state.selected_background_input,
+                selected_genre=st.session_state.selected_genre_input,
                 api_key=llm_config["api_key"],
                 model=llm_config["model"],
                 nonce=generation_nonce,
@@ -2882,6 +3783,8 @@ if generate_clicked:
         st.session_state.student_name_value = st.session_state.student_name_input.strip()
         st.session_state.student_number_value = st.session_state.student_number_input.strip()
         st.session_state.cefr_level_value = st.session_state.cefr_level_input
+        st.session_state.selected_background_value = st.session_state.selected_background_input
+        st.session_state.selected_genre_value = st.session_state.selected_genre_input
         st.session_state.active_questionnaire = questionnaire
         st.session_state.current_section_index = 0
         st.session_state.generation_nonce = generation_nonce
@@ -2894,10 +3797,12 @@ if questionnaire_ready:
         st.session_state.student_name_input.strip() != st.session_state.student_name_value
         or st.session_state.student_number_input.strip() != st.session_state.student_number_value
         or st.session_state.cefr_level_input != st.session_state.cefr_level_value
+        or st.session_state.selected_background_input != st.session_state.selected_background_value
+        or st.session_state.selected_genre_input != st.session_state.selected_genre_value
     )
     if profile_changed_after_generation:
         st.warning(
-            "Participant information changed after generation. Click Generate Passage & Questions again to refresh the passage and question set."
+            "Participant information or generation options changed after generation. Click Generate Passage & Questions again to refresh the passage and question set."
         )
 
 if google_sheets_config["enabled"]:
@@ -3134,8 +4039,10 @@ if submit_clicked:
         st.session_state.student_name_input.strip() != st.session_state.student_name_value
         or st.session_state.student_number_input.strip() != st.session_state.student_number_value
         or st.session_state.cefr_level_input != st.session_state.cefr_level_value
+        or st.session_state.selected_background_input != st.session_state.selected_background_value
+        or st.session_state.selected_genre_input != st.session_state.selected_genre_value
     ):
-        st.error("Participant information changed after generation. Please generate the passage and questions again before submitting.")
+        st.error("Participant information or generation options changed after generation. Please generate the passage and questions again before submitting.")
     else:
         validation_error = validate_submission_answers(
             questionnaire=current_questionnaire,

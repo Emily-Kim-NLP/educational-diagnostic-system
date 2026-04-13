@@ -4,11 +4,12 @@ A Streamlit app for CEFR-based passage generation, interactive questionnaire del
 
 ## What This App Does
 
-- Collects participant name, student number, and CEFR level.
-- Generates a CEFR-matched passage with 5-6 sentences.
+- Collects participant name, student number, CEFR level, preferred background, and text genre.
+- Generates a CEFR-matched passage with exactly 10 sentences.
 - Generates 10 interactive questions across understanding, emotion, cognition, behavior, and strategy.
 - Personalizes self questions based on previous character-response answers.
 - Prompts the participant to rewrite incomplete, vague, or `I don't know` style answers.
+- Evaluates fluency, emotion, cognition, behavior, and strategy signals.
 - Saves responses and evaluation results to Google Sheets or local CSV.
 
 ## Run Locally
@@ -47,8 +48,10 @@ With OpenAI configured, the app will:
 - Generate the interactive question set
 - Check whether answers are incomplete or need rewriting
 - Generate personalized self follow-up questions
+- Better reflect the selected background and genre in generated passages
 
 Without OpenAI, the app will fall back to built-in passages, question templates, and rule-based answer checks.
+The fallback path also supports the selected background and genre and keeps the 10-sentence passage format.
 
 ### Google Sheets
 
