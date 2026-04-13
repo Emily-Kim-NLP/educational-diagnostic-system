@@ -2,6 +2,8 @@
 
 This app can save responses and evaluations directly to Google Sheets.
 
+For deployed Streamlit apps, Google Sheets is strongly recommended because local CSV fallback storage may not persist reliably across restarts or redeploys.
+
 ## 1. Create a Google service account
 
 1. Open Google Cloud Console.
@@ -24,6 +26,13 @@ In Streamlit Community Cloud:
 3. Open `Secrets`.
 4. Paste the values from `.streamlit/secrets.example.toml`.
 5. Replace the example values with your real service account JSON fields and spreadsheet ID.
+
+You should also add OpenAI secrets if you want the deployed app to generate:
+
+- CEFR-level passages
+- Interactive questions
+- Answer rewrite feedback
+- Personalized self follow-up questions
 
 The app supports both of these secrets formats:
 
