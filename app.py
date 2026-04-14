@@ -926,7 +926,14 @@ Return JSON only:
     return normalize_answer_feedback_payload(payload)
 
 
-def build_local_answer_feedback(answer: str) -> dict:
+def period_sentence_count(text: str) -> int:
+    if not text:
+        return 0
+    parts = [part.strip() for part in text.split(".") if part.strip()]
+    return len(parts)
+
+
+def build_local_answer_feedback(question: dict, answer: str) -> dict:
     stripped = answer.strip()
     normalized_lower = re.sub(r"\s+", " ", stripped.lower())
 
@@ -951,6 +958,20 @@ def build_local_answer_feedback(answer: str) -> dict:
             "message_ko": "답변이 I don't know로 되어 있어 불완전합니다. 할 수 있는 만큼이라도 적어 주세요.",
         }
 
+    if question.get("id") == "q1" and period_sentence_count(stripped) < 2:
+        return {
+            "status": "rewrite",
+            "message": "Q1 is not complete yet. Please write at least 2 sentences and separate them with periods.",
+            "message_ko": "Q1이 아직 완료되지 않았습니다. 마침표(.)를 사용해 최소 2문장 이상으로 작성해 주세요.",
+        }
+
+    if question.get("id") == "q1":
+        return {
+            "status": "valid",
+            "message": "Q1 is complete. This answer can be used to create Question 2.",
+            "message_ko": "Q1이 완료되었습니다. 이 답변을 바탕으로 2번 질문을 만들 수 있습니다.",
+        }
+
     return {
         "status": "valid",
         "message": "Recorded. This answer can be used to create the next question.",
@@ -966,7 +987,8 @@ def get_answer_feedback(
     api_key: str,
     model: str,
 ) -> dict:
-    return build_local_answer_feedback(answer)
+    question = json.loads(question_json)
+    return build_local_answer_feedback(question, answer)
 
 
 def build_pending_self_prompt(
@@ -2957,10 +2979,10 @@ st.caption(
 )
 st.info(
     "Answer guide: Every response must be written in English. "
-    "Short answers are allowed. The app only asks for a rewrite when the answer is blank, says I don't know, or contains only symbols or punctuation. "
+    "For Q1, write at least 2 sentences and separate them with periods. The app only asks for a rewrite when the answer is blank, says I don't know, contains only symbols or punctuation, or Q1 has fewer than 2 period-based sentences. "
     "In each part, Question 1 appears first, and Question 2 is generated from the answer to Question 1. "
     "After editing a part, click Check This Part to refresh the feedback and unlock the next follow-up question.\n\n"
-    "답변 가이드: 짧은 답변도 가능합니다. 답이 비어 있거나 I don't know이거나 기호만 있는 경우에만 다시 쓰라는 안내가 나옵니다. "
+    "답변 가이드: 모든 답변은 영어로 작성해 주세요. Q1은 마침표(.)를 기준으로 최소 2문장 이상 작성해 주세요. 답이 비어 있거나 I don't know이거나 기호만 있거나, Q1이 2문장 미만이면 다시 쓰라는 안내가 나옵니다. "
     "각 파트에서는 1번 질문이 먼저 나오고, 2번 질문은 1번 답변을 보고 생성됩니다. "
     "답을 수정한 뒤에는 Check This Part 버튼을 눌러 피드백과 다음 질문을 새로 반영해 주세요."
 )
