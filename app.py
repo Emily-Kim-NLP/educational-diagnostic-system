@@ -143,8 +143,9 @@ def get_google_sheets_config() -> dict:
     service_account = _get_secret_dict("google_service_account")
     if not service_account:
         connections = _get_secret_dict("connections")
-        gsheets = connections.get("gsheets", {}) if isinstance(connections, dict) else {}
-        if isinstance(gsheets, dict):
+        gsheets = connections.get("gsheets", {}) if isinstance(connections, Mapping) else {}
+        if isinstance(gsheets, Mapping):
+            gsheets = dict(gsheets)
             service_account = {
                 key: value
                 for key, value in gsheets.items()
