@@ -3219,16 +3219,15 @@ st.info(
     "Answer guide: Every response must be written in English. "
     "For Q1, write at least 2 sentences and separate them with periods. The app only asks for a rewrite when the answer is blank, says I don't know, contains only symbols or punctuation, or Q1 has fewer than 2 period-based sentences. "
     "In each part, Question 1 appears first, and Question 2 is generated from the answer to Question 1. "
-    "After editing a part, click Check This Part to refresh the feedback and unlock the next follow-up question.\n\n"
+    "After writing an answer, click the Check button below each question to confirm it and unlock the next question.\n\n"
     "답변 가이드: 모든 답변은 영어로 작성해 주세요. Q1은 마침표(.)를 기준으로 최소 2문장 이상 작성해 주세요. 답이 비어 있거나 I don't know이거나 기호만 있거나, Q1이 2문장 미만이면 다시 쓰라는 안내가 나옵니다. "
     "각 파트에서는 1번 질문이 먼저 나오고, 2번 질문은 1번 답변을 보고 생성됩니다. "
-    "답을 수정한 뒤에는 Check This Part 버튼을 눌러 피드백과 다음 질문을 새로 반영해 주세요."
+    "답변을 작성한 뒤 각 질문 아래의 Check 버튼을 눌러 완료를 확인하고 다음 질문을 열어주세요."
 )
 
 passage_col, question_col = st.columns([0.9, 1.3], gap="large")
 
 previous_clicked = False
-check_part_clicked = False
 next_clicked = False
 submit_clicked = False
 
@@ -3257,217 +3256,190 @@ with question_col:
     section_completed_questions = 0
     section_total_questions = len(current_section["questions"])
 
-    with st.form(
-        key=f"question_section_form_{st.session_state.generation_nonce}_{current_section_index}",
-        clear_on_submit=False,
-    ):
-        render_section_header(current_section)
-        st.caption(f"Part {current_section_index + 1} of {len(current_questionnaire['sections'])}")
+    render_section_header(current_section)
+    st.caption(f"Part {current_section_index + 1} of {len(current_questionnaire['sections'])}")
 
-        for question in current_section["questions"]:
-            question_key = widget_key(question["id"])
-            if not question.get("ready_for_answer", True):
-                st.session_state[question_key] = ""
-                current_answers[question["id"]] = ""
-            else:
-                effective_answer = current_answers.get(question["id"], "")
-                if question_key not in st.session_state or (
-                    not str(st.session_state.get(question_key, "")).strip() and effective_answer
-                ):
-                    st.session_state[question_key] = effective_answer
-            q_feedback = feedback_map.get(question["id"])
-            q_is_complete = bool(q_feedback and q_feedback.get("status") == "valid")
-            render_question_card(question, is_complete=q_is_complete)
+    for question in current_section["questions"]:
+        question_key = widget_key(question["id"])
+        if not question.get("ready_for_answer", True):
+            st.session_state[question_key] = ""
+            current_answers[question["id"]] = ""
+        else:
+            effective_answer = current_answers.get(question["id"], "")
+            if question_key not in st.session_state or (
+                not str(st.session_state.get(question_key, "")).strip() and effective_answer
+            ):
+                st.session_state[question_key] = effective_answer
+        q_feedback = feedback_map.get(question["id"])
+        q_is_complete = bool(q_feedback and q_feedback.get("status") == "valid")
+        render_question_card(question, is_complete=q_is_complete)
 
-            answer = st.text_area(
-                f"{question['label']}. {question['prompt']}",
-                key=question_key,
-                label_visibility="collapsed",
-                height=170,
-                disabled=not question.get("ready_for_answer", True),
-                placeholder=(
-                    "Write a simple English answer. Short answers are okay."
-                    if question.get("ready_for_answer", True)
-                    else "The follow-up question will open after the first answer in this part is usable."
-                ),
+        answer = st.text_area(
+            f"{question['label']}. {question['prompt']}",
+            key=question_key,
+            label_visibility="collapsed",
+            height=170,
+            disabled=not question.get("ready_for_answer", True),
+            placeholder=(
+                "Write a simple English answer. Short answers are okay."
+                if question.get("ready_for_answer", True)
+                else "The follow-up question will open after the first answer in this part is usable."
+            ),
+        )
+        answer = answer.strip()
+        current_answers[question["id"]] = answer
+
+        if not question.get("ready_for_answer", True):
+            render_check_status_box(
+                "pending",
+                "Waiting",
+                "This follow-up will open after the previous answer can be used to create the next question.",
             )
-            answer = answer.strip()
-            current_answers[question["id"]] = answer
+            continue
 
-            if not question.get("ready_for_answer", True):
-                render_check_status_box(
-                    "pending",
-                    "Waiting",
-                    "This follow-up will open after the previous answer can be used to create the next question.",
-                )
-                continue
-
-            if not answer:
-                render_check_status_box(
-                    "pending",
-                    "Not answered yet",
-                    "Write an answer above, then click Check This Part to confirm completion.",
-                )
-                continue
-
-            feedback = feedback_map.get(question["id"])
-            if feedback and feedback["status"] == "valid":
-                section_completed_questions += 1
-                render_check_status_box(
-                    "complete",
-                    "Complete",
-                    f"{feedback['message']} / {feedback['message_ko']}",
-                )
-            elif feedback:
-                render_check_status_box(
-                    "rewrite",
-                    "Rewrite needed",
-                    f"{feedback['message']} / {feedback['message_ko']}",
-                )
-            else:
-                render_check_status_box(
-                    "pending",
-                    "Ready to check",
-                    "Click Check This Part below to verify this answer.",
-                )
-
-        completed_questions = 0
-        for question in get_all_questions(current_questionnaire):
-            answer = current_answers.get(question["id"], "").strip()
-            if not question.get("ready_for_answer", True) or not answer:
-                continue
-
-            feedback = feedback_map.get(question["id"])
-            if feedback and feedback["status"] == "valid":
-                completed_questions += 1
-
-        section_complete = section_completed_questions == section_total_questions
-
-        st.markdown("### Completion")
-        checklist_rows = []
-        for cl_section in current_questionnaire["sections"]:
-            badges = []
-            for cl_q in cl_section["questions"]:
-                qid = cl_q["id"]
-                label = cl_q.get("label", qid)
-                has_answer = bool(current_answers.get(qid, "").strip())
-                cl_fb = feedback_map.get(qid)
-                is_valid = bool(cl_fb and cl_fb.get("status") == "valid")
-
-                if is_valid:
-                    item_class = "checklist-item checklist-item-valid"
-                    icon = "&#10003;"
-                elif has_answer:
-                    item_class = "checklist-item checklist-item-answered"
-                    icon = "&#10003;"
-                else:
-                    item_class = "checklist-item"
-                    icon = "&#9675;"
-
-                badges.append(
-                    f"<span class='{item_class}'>{icon} {html.escape(label)}</span>"
-                )
-
-            checklist_rows.append(
-                f"<div class='checklist-row'>"
-                f"<span class='checklist-section-title'>{html.escape(cl_section.get('title', ''))}</span>"
-                f"<span class='checklist-questions'>{''.join(badges)}</span>"
-                f"</div>"
-            )
-
-        st.markdown(
-            f"<div class='checklist-grid'>{''.join(checklist_rows)}</div>",
-            unsafe_allow_html=True,
+        check_q_clicked = st.button(
+            f"Check {question['label']}",
+            key=f"check_btn_{question['id']}_{st.session_state.generation_nonce}_{current_section_index}",
+            use_container_width=True,
+            disabled=not answer,
         )
 
-        if not section_complete:
-            st.caption("Finish this part first. Then the Next button will be available.")
+        if check_q_clicked:
+            for q in current_section["questions"]:
+                qk = widget_key(q["id"])
+                if q.get("ready_for_answer", True):
+                    set_saved_answer(q["id"], str(st.session_state.get(qk, "")).strip())
+                else:
+                    set_saved_answer(q["id"], "")
+            st.session_state.materialized_signature = ""
+            st.session_state.feedback_signature = ""
+            st.rerun()
 
-        nav_col1, nav_col2, nav_col3 = st.columns(3)
-        with nav_col1:
-            previous_clicked = st.form_submit_button(
-                "Previous Part",
-                use_container_width=True,
-                disabled=(current_section_index == 0),
+        if not answer:
+            render_check_status_box(
+                "pending",
+                "Not answered yet",
+                "Write an answer above and click the Check button to confirm completion.",
             )
-        with nav_col2:
-            check_part_clicked = st.form_submit_button(
-                "Check This Part",
-                use_container_width=True,
+            continue
+
+        feedback = feedback_map.get(question["id"])
+        if feedback and feedback["status"] == "valid":
+            section_completed_questions += 1
+            render_check_status_box(
+                "complete",
+                "Complete",
+                f"{feedback['message']} / {feedback['message_ko']}",
             )
-        with nav_col3:
-            if current_section_index < len(current_questionnaire["sections"]) - 1:
-                next_clicked = st.form_submit_button(
-                    "Next Part",
-                    use_container_width=True,
-                    disabled=(not section_complete or profile_changed_after_generation),
-                )
+        elif feedback:
+            render_check_status_box(
+                "rewrite",
+                "Rewrite needed",
+                f"{feedback['message']} / {feedback['message_ko']}",
+            )
+        else:
+            render_check_status_box(
+                "pending",
+                "Ready to check",
+                "Click the Check button above to verify this answer.",
+            )
+
+    completed_questions = 0
+    for question in get_all_questions(current_questionnaire):
+        answer = current_answers.get(question["id"], "").strip()
+        if not question.get("ready_for_answer", True) or not answer:
+            continue
+
+        feedback = feedback_map.get(question["id"])
+        if feedback and feedback["status"] == "valid":
+            completed_questions += 1
+
+    section_complete = section_completed_questions == section_total_questions
+
+    st.markdown("### Completion")
+    checklist_rows = []
+    for cl_section in current_questionnaire["sections"]:
+        badges = []
+        for cl_q in cl_section["questions"]:
+            qid = cl_q["id"]
+            label = cl_q.get("label", qid)
+            has_answer = bool(current_answers.get(qid, "").strip())
+            cl_fb = feedback_map.get(qid)
+            is_valid = bool(cl_fb and cl_fb.get("status") == "valid")
+
+            if is_valid:
+                item_class = "checklist-item checklist-item-valid"
+                icon = "&#10003;"
+            elif has_answer:
+                item_class = "checklist-item checklist-item-answered"
+                icon = "&#10003;"
             else:
-                submit_clicked = st.form_submit_button(
-                    "Submit Responses",
-                    use_container_width=True,
-                    disabled=(not section_complete or profile_changed_after_generation),
-                )
+                item_class = "checklist-item"
+                icon = "&#9675;"
 
-form_submitted = previous_clicked or check_part_clicked or next_clicked or submit_clicked
+            badges.append(
+                f"<span class='{item_class}'>{icon} {html.escape(label)}</span>"
+            )
 
-if form_submitted:
+        checklist_rows.append(
+            f"<div class='checklist-row'>"
+            f"<span class='checklist-section-title'>{html.escape(cl_section.get('title', ''))}</span>"
+            f"<span class='checklist-questions'>{''.join(badges)}</span>"
+            f"</div>"
+        )
+
+    st.markdown(
+        f"<div class='checklist-grid'>{''.join(checklist_rows)}</div>",
+        unsafe_allow_html=True,
+    )
+
+    if not section_complete:
+        st.caption("Finish this part first. Then the Next button will be available.")
+
+    nav_col1, nav_col2 = st.columns(2)
+    with nav_col1:
+        previous_clicked = st.button(
+            "Previous Part",
+            key=f"prev_btn_{st.session_state.generation_nonce}_{current_section_index}",
+            use_container_width=True,
+            disabled=(current_section_index == 0),
+        )
+    with nav_col2:
+        if current_section_index < len(current_questionnaire["sections"]) - 1:
+            next_clicked = st.button(
+                "Next Part",
+                key=f"next_btn_{st.session_state.generation_nonce}_{current_section_index}",
+                use_container_width=True,
+                disabled=(not section_complete or profile_changed_after_generation),
+            )
+        else:
+            submit_clicked = st.button(
+                "Submit Responses",
+                key=f"submit_btn_{st.session_state.generation_nonce}_{current_section_index}",
+                use_container_width=True,
+                disabled=(not section_complete or profile_changed_after_generation),
+            )
+
+def _save_section_answers():
     for question in current_section["questions"]:
         question_key = widget_key(question["id"])
         if not question.get("ready_for_answer", True):
             st.session_state[question_key] = ""
             current_answers[question["id"]] = ""
             set_saved_answer(question["id"], "")
-            continue
-
-        normalized_answer = st.session_state.get(question_key, "").strip()
-        current_answers[question["id"]] = normalized_answer
-        set_saved_answer(question["id"], normalized_answer)
+        else:
+            normalized_answer = str(st.session_state.get(question_key, "")).strip()
+            current_answers[question["id"]] = normalized_answer
+            set_saved_answer(question["id"], normalized_answer)
 
 
 if previous_clicked:
+    _save_section_answers()
     st.session_state.current_section_index = max(0, current_section_index - 1)
     st.rerun()
 
-if check_part_clicked:
-    refreshed_answers_snapshot = build_answers_snapshot(base_questionnaire)
-    refreshed_answers_json = serialize_answers_snapshot(base_questionnaire, refreshed_answers_snapshot)
-    refreshed_materialized_signature = hashlib.sha256(
-        f"{base_questionnaire_json}|{refreshed_answers_json}|{llm_config['model']}|{llm_config['api_key']}".encode("utf-8")
-    ).hexdigest()
-
-    try:
-        refreshed_questionnaire = materialize_questionnaire_for_answers_cached(
-            questionnaire_json=base_questionnaire_json,
-            answers_json=refreshed_answers_json,
-            api_key=llm_config["api_key"],
-            model=llm_config["model"],
-        )
-        refreshed_questionnaire_json = json.dumps(refreshed_questionnaire, ensure_ascii=False, sort_keys=True)
-        refreshed_feedback_map = build_answer_feedback_map(
-            questionnaire_json=refreshed_questionnaire_json,
-            answers_json=refreshed_answers_json,
-            api_key=llm_config["api_key"],
-            model=llm_config["model"],
-        )
-    except Exception as error:
-        st.error(
-            "Refreshing this part failed.\n\n"
-            f"Error: {format_exception_message(error)}"
-        )
-        st.stop()
-
-    refreshed_feedback_signature = hashlib.sha256(
-        f"{refreshed_questionnaire_json}|{refreshed_answers_json}|{llm_config['model']}|{llm_config['api_key']}".encode("utf-8")
-    ).hexdigest()
-
-    st.session_state.materialized_questionnaire = refreshed_questionnaire
-    st.session_state.materialized_signature = refreshed_materialized_signature
-    st.session_state.feedback_map = refreshed_feedback_map
-    st.session_state.feedback_signature = refreshed_feedback_signature
-    st.rerun()
-
 if next_clicked:
+    _save_section_answers()
     st.session_state.current_section_index = min(
         len(current_questionnaire["sections"]) - 1,
         current_section_index + 1,
@@ -3476,6 +3448,7 @@ if next_clicked:
 
 
 if submit_clicked:
+    _save_section_answers()
     if (
         st.session_state.student_name_input.strip() != st.session_state.student_name_value
         or st.session_state.student_number_input.strip() != st.session_state.student_number_value
