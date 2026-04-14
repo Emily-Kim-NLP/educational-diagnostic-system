@@ -53,6 +53,163 @@ def load_prompt_template(*path_parts: str, **context) -> str:
     return template.format_map(PromptFormatDict(context))
 
 
+def ensure_output_directories():
+    for directory in [
+        OUTPUT_DIR,
+        RESPONSES_DIR,
+        EVALUATIONS_DIR,
+        BY_STUDENT_RESPONSES_DIR,
+        BY_STUDENT_EVALUATIONS_DIR,
+    ]:
+        os.makedirs(directory, exist_ok=True)
+
+
+def get_question_slots() -> list:
+    return [
+        deepcopy(question)
+        for section in QUESTION_SECTION_BLUEPRINTS
+        for question in section["questions"]
+    ]
+
+
+def get_all_questions(questionnaire: dict) -> list:
+    return [
+        question
+        for section in questionnaire.get("sections", [])
+        for question in section.get("questions", [])
+    ]
+
+
+def extract_json_object(text: str) -> dict:
+    if not text:
+        raise ValueError("The model returned an empty response.")
+
+    start_index = text.find("{")
+    end_index = text.rfind("}")
+    if start_index == -1 or end_index == -1 or end_index <= start_index:
+        raise ValueError("The model response did not contain a valid JSON object.")
+
+    return json.loads(text[start_index : end_index + 1])
+
+
+def get_openai_client(api_key: str) -> OpenAI:
+    if not api_key:
+        raise ValueError("OpenAI API key is required.")
+    return OpenAI(api_key=api_key)
+
+
+def _get_secret_dict(key: str) -> dict:
+    try:
+        value = st.secrets.get(key, {})
+    except Exception:
+        return {}
+
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
+def get_llm_config() -> dict:
+    openai_config = _get_secret_dict("openai")
+    api_key = (
+        str(openai_config.get("api_key", "")).strip()
+        or str(os.environ.get("OPENAI_API_KEY", "")).strip()
+    )
+    model = str(openai_config.get("model", "")).strip() or DEFAULT_LLM_MODEL
+    return {
+        "enabled": bool(api_key),
+        "api_key": api_key,
+        "model": model,
+    }
+
+
+def get_google_sheets_config() -> dict:
+    google_sheets = _get_secret_dict("google_sheets")
+    spreadsheet_id = str(google_sheets.get("spreadsheet_id", "")).strip()
+    responses_worksheet = str(
+        google_sheets.get("responses_worksheet", DEFAULT_RESPONSES_WORKSHEET)
+    ).strip() or DEFAULT_RESPONSES_WORKSHEET
+    evaluations_worksheet = str(
+        google_sheets.get("evaluations_worksheet", DEFAULT_EVALUATIONS_WORKSHEET)
+    ).strip() or DEFAULT_EVALUATIONS_WORKSHEET
+
+    service_account = _get_secret_dict("google_service_account")
+    if not service_account:
+        connections = _get_secret_dict("connections")
+        gsheets = connections.get("gsheets", {}) if isinstance(connections, dict) else {}
+        if isinstance(gsheets, dict):
+            service_account = {
+                key: value
+                for key, value in gsheets.items()
+                if key not in {"spreadsheet_id", "responses_worksheet", "evaluations_worksheet", "type"}
+            }
+            spreadsheet_id = spreadsheet_id or str(gsheets.get("spreadsheet_id", "")).strip()
+            responses_worksheet = (
+                str(gsheets.get("responses_worksheet", responses_worksheet)).strip()
+                or responses_worksheet
+            )
+            evaluations_worksheet = (
+                str(gsheets.get("evaluations_worksheet", evaluations_worksheet)).strip()
+                or evaluations_worksheet
+            )
+
+    enabled = bool(service_account and spreadsheet_id)
+    return {
+        "enabled": enabled,
+        "service_account": service_account,
+        "spreadsheet_id": spreadsheet_id,
+        "responses_worksheet": responses_worksheet,
+        "evaluations_worksheet": evaluations_worksheet,
+    }
+
+
+def _append_rows_to_local_csv(rows: list[dict], file_path: str) -> dict:
+    dataframe = pd.DataFrame(rows)
+    file_exists = os.path.exists(file_path)
+    dataframe.to_csv(file_path, mode="a", header=not file_exists, index=False, encoding="utf-8-sig")
+    return {
+        "backend": "local_csv",
+        "file_path": file_path,
+    }
+
+
+def _append_rows_to_google_sheet(rows: list[dict], worksheet_name: str) -> dict:
+    config = get_google_sheets_config()
+    credentials = dict(config["service_account"])
+    credentials["private_key"] = str(credentials.get("private_key", "")).replace("\\n", "\n")
+
+    client = gspread.service_account_from_dict(credentials)
+    spreadsheet = client.open_by_key(config["spreadsheet_id"])
+
+    try:
+        worksheet = spreadsheet.worksheet(worksheet_name)
+    except gspread.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=100)
+
+    dataframe = pd.DataFrame(rows)
+    records = dataframe.fillna("").astype(str).values.tolist()
+    headers = list(dataframe.columns)
+
+    if not worksheet.get_all_values():
+        worksheet.append_row(headers)
+
+    if records:
+        worksheet.append_rows(records, value_input_option="USER_ENTERED")
+
+    return {
+        "backend": "google_sheets",
+        "spreadsheet_url": spreadsheet.url,
+        "worksheet_name": worksheet_name,
+    }
+
+
+def save_rows(rows: list[dict], local_file_path: str, google_worksheet_name: str) -> dict:
+    google_config = get_google_sheets_config()
+    if google_config["enabled"]:
+        return _append_rows_to_google_sheet(rows, google_worksheet_name)
+    return _append_rows_to_local_csv(rows, local_file_path)
+
+
 MIN_SENTENCES = 1
 RECOMMENDED_SENTENCES = 2
 CEFR_LEVEL_OPTIONS = ["A1", "A2", "B1", "B2", "C1", "C2"]
