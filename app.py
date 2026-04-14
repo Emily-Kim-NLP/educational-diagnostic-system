@@ -2537,6 +2537,38 @@ def inject_custom_styles():
             color: #9a5a00 !important;
         }
 
+        .question-complete-badge {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.28rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            background: rgba(220, 252, 231, 0.9);
+            color: #1f5b33 !important;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .question-incomplete-badge {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.28rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            background: rgba(241, 245, 249, 0.88);
+            color: #64748b !important;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
         .question-prompt {
             font-size: 1.14rem;
             line-height: 1.58;
@@ -2670,7 +2702,7 @@ def render_section_header(section: dict):
     )
 
 
-def render_question_card(question: dict):
+def render_question_card(question: dict, is_complete: bool = False):
     card_classes = ["question-card"]
 
     if question["type"] == "Self":
@@ -2692,6 +2724,11 @@ def render_question_card(question: dict):
     if note_text:
         note_html = f"<div class='{note_class}'>{html.escape(note_text)}</div>"
 
+    if is_complete:
+        badge_html = "<span class='question-complete-badge'>&#10003; Complete</span>"
+    else:
+        badge_html = "<span class='question-incomplete-badge'>&#9675; Incomplete</span>"
+
     st.markdown(
         (
             f"<div class='{' '.join(card_classes)}'>"
@@ -2699,6 +2736,7 @@ def render_question_card(question: dict):
             f"<span class='question-chip question-chip-label'>{html.escape(question['label'])}</span>"
             f"<span class='question-chip question-chip-layer'>{html.escape(question['layer'])}</span>"
             f"<span class='question-chip question-chip-type'>{html.escape(question['type'])}</span>"
+            f"{badge_html}"
             "</div>"
             f"<div class='question-prompt'>{html.escape(question['prompt'])}</div>"
             f"<div class='question-ko'>한국어 해석: {html.escape(question['prompt_ko'])}</div>"
@@ -3076,7 +3114,9 @@ with question_col:
                     not str(st.session_state.get(question_key, "")).strip() and effective_answer
                 ):
                     st.session_state[question_key] = effective_answer
-            render_question_card(question)
+            q_feedback = feedback_map.get(question["id"])
+            q_is_complete = bool(q_feedback and q_feedback.get("status") == "valid")
+            render_question_card(question, is_complete=q_is_complete)
 
             answer = st.text_area(
                 f"{question['label']}. {question['prompt']}",
@@ -3184,7 +3224,6 @@ if form_submitted:
             continue
 
         normalized_answer = st.session_state.get(question_key, "").strip()
-        st.session_state[question_key] = normalized_answer
         current_answers[question["id"]] = normalized_answer
         set_saved_answer(question["id"], normalized_answer)
 
