@@ -585,6 +585,30 @@ def apply_prompt_map_to_sections(prompt_map: dict) -> list:
     return sections
 
 
+def build_initial_question_section(first_question: str, first_question_ko: str) -> list:
+    return [
+        {
+            "title": "Part 1. Understanding",
+            "title_ko": "1부. 이해",
+            "questions": [
+                {
+                    "id": "q1",
+                    "label": "Q1",
+                    "layer": "Understanding",
+                    "type": "Character",
+                    "base_prompt": first_question,
+                    "base_prompt_ko": first_question_ko,
+                    "prompt": first_question,
+                    "prompt_ko": first_question_ko,
+                    "prompt_source": "openai",
+                    "prompt_note": "",
+                    "ready_for_answer": True,
+                }
+            ],
+        }
+    ]
+
+
 def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
     story_title = str(payload.get("story_title", "")).strip()
     story_title_ko = str(payload.get("story_title_ko", "")).strip()
@@ -603,7 +627,26 @@ def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
 
     passage_sentences = normalize_sentence_payload(payload, "passage_sentences")
     passage_ko_sentences = normalize_sentence_payload(payload, "passage_ko_sentences")
-    prompt_map = normalize_prompt_map(payload)
+
+    first_question = str(payload.get("first_question", "")).strip()
+    first_question_ko = str(payload.get("first_question_ko", "")).strip()
+
+    if not first_question or not first_question_ko:
+        questions = payload.get("questions", [])
+        if isinstance(questions, list):
+            for item in questions:
+                if isinstance(item, dict) and str(item.get("id", "")).strip() == "q1":
+                    first_question = first_question or str(item.get("prompt", "")).strip()
+                    first_question_ko = first_question_ko or str(item.get("prompt_ko", "")).strip()
+                    break
+        elif isinstance(questions, dict):
+            q1 = questions.get("q1", {})
+            if isinstance(q1, dict):
+                first_question = first_question or str(q1.get("prompt", "")).strip()
+                first_question_ko = first_question_ko or str(q1.get("prompt_ko", "")).strip()
+
+    if not first_question or not first_question_ko:
+        raise ValueError("The model did not return the first question in both English and Korean.")
 
     questionnaire = {
         "id": "cefr_dynamic",
@@ -617,11 +660,11 @@ def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
         "relationship_focus": relationship_focus,
         "relationship_focus_ko": relationship_focus_ko,
         "intro": (
-            "Read the CEFR-level passage on the left and answer every question on the right in English. "
+            "Read the CEFR-level paragraph below and answer the first question in English. "
             "Short answers are allowed, and longer answers are welcome."
         ),
         "intro_ko": (
-            "왼쪽 CEFR 수준 지문을 읽고 오른쪽 질문에 모두 영어로 답하세요. "
+            "아래 CEFR 수준 한 문단을 읽고 첫 번째 질문에 영어로 답하세요. "
             "짧은 답변도 가능하며, 더 길게 써도 됩니다."
         ),
         "cefr_level": cefr_level,
@@ -633,7 +676,7 @@ def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
         "text_ko": format_passage_markdown(story_title_ko, passage_ko_sentences),
         "passage_plain": " ".join(passage_sentences),
         "passage_ko_plain": " ".join(passage_ko_sentences),
-        "sections": apply_prompt_map_to_sections(prompt_map),
+        "sections": build_initial_question_section(first_question, first_question_ko),
     }
 
     return questionnaire
@@ -650,7 +693,6 @@ def generate_experiment_with_openai(
     model: str,
 ) -> dict:
     client = get_openai_client(api_key)
-    question_slot_instructions = build_question_slot_instructions()
 
     system_prompt = load_prompt_template("generate_experiment", "system.txt")
     user_prompt = load_prompt_template(
@@ -662,8 +704,6 @@ def generate_experiment_with_openai(
         variation_seed=variation_seed,
         selected_background=selected_background,
         selected_genre=selected_genre,
-        question_generation_criteria=QUESTION_GENERATION_CRITERIA,
-        question_slot_instructions=question_slot_instructions,
     )
 
     completion = client.chat.completions.create(
@@ -682,7 +722,7 @@ def generate_experiment_with_openai(
     questionnaire["question_source"] = "openai"
     questionnaire["question_model"] = model
     questionnaire["question_generation_note"] = (
-        "Passage and interactive questions were generated with OpenAI "
+        "A 10-sentence paragraph and the first question were generated with OpenAI "
         f"for background '{selected_background}' and genre '{selected_genre}'."
     )
     return questionnaire
@@ -2531,7 +2571,7 @@ def render_placeholder():
             <div class="panel-title">Ready to Build the Experiment</div>
             <div class="panel-subtitle">
                 Enter the participant profile, preferred background, and genre above, then click <b>Generate Passage &amp; Questions</b>.
-                The app will create a CEFR-level passage that follows those choices, then run the questionnaire part by part with adaptive follow-up questions.
+                The app will create one CEFR-level paragraph with exactly 10 sentences and then generate the first question from that paragraph.
             </div>
         </div>
         """,
@@ -2589,14 +2629,8 @@ def render_question_card(question: dict):
 
 
 def render_passage_panel(questionnaire: dict, student_name: str, student_number: str, cefr_level: str):
-    english_sentences = "".join(
-        f"<p class='passage-sentence'>{html.escape(sentence)}</p>"
-        for sentence in questionnaire.get("passage_sentences", [])
-    )
-    korean_sentences = "".join(
-        f"<p class='passage-sentence'>{html.escape(sentence)}</p>"
-        for sentence in questionnaire.get("passage_ko_sentences", [])
-    )
+    english_paragraph = html.escape(" ".join(questionnaire.get("passage_sentences", [])))
+    korean_paragraph = html.escape(" ".join(questionnaire.get("passage_ko_sentences", [])))
 
     st.markdown(
         f"""
@@ -2613,11 +2647,11 @@ def render_passage_panel(questionnaire: dict, student_name: str, student_number:
             </div>
             <div class="passage-block">
                 <h4>English Passage</h4>
-                {english_sentences}
+                <p class='passage-sentence'>{english_paragraph}</p>
             </div>
             <div class="passage-block">
                 <h4>Korean Translation</h4>
-                {korean_sentences}
+                <p class='passage-sentence'>{korean_paragraph}</p>
             </div>
             <div class="status-box status-box-neutral">
                 Passage stays visible here by default so participants do not need to keep scrolling up while answering.
@@ -2804,93 +2838,21 @@ if not questionnaire_ready:
     st.stop()
 
 base_questionnaire = st.session_state.active_questionnaire
-base_questionnaire_json = json.dumps(base_questionnaire, ensure_ascii=False, sort_keys=True)
-current_answers_snapshot = build_answers_snapshot(base_questionnaire)
-base_answers_json = serialize_answers_snapshot(base_questionnaire, current_answers_snapshot)
+first_section = base_questionnaire["sections"][0]
+first_question = first_section["questions"][0]
 
-materialized_signature = hashlib.sha256(
-    f"{base_questionnaire_json}|{base_answers_json}|{llm_config['model']}|{llm_config['api_key']}".encode("utf-8")
-).hexdigest()
-
-if st.session_state.materialized_signature == materialized_signature:
-    current_questionnaire = deepcopy(st.session_state.materialized_questionnaire)
-else:
-    try:
-        with st.spinner(
-            "Analyzing answers and preparing the next interactive question. "
-            "The loading indicator is centered to keep the experiment flow clear for participants."
-        ):
-            current_questionnaire = materialize_questionnaire_for_answers_cached(
-                questionnaire_json=base_questionnaire_json,
-                answers_json=base_answers_json,
-                api_key=llm_config["api_key"],
-                model=llm_config["model"],
-            )
-    except Exception as exc:
-        st.error(format_exception_message(exc, "OpenAI follow-up generation failed"))
-        st.stop()
-    st.session_state.materialized_questionnaire = current_questionnaire
-    st.session_state.materialized_signature = materialized_signature
-    st.session_state.feedback_map = {}
-    st.session_state.feedback_signature = ""
-
-if st.session_state.current_section_index >= len(current_questionnaire["sections"]):
-    st.session_state.current_section_index = max(0, len(current_questionnaire["sections"]) - 1)
-
-current_section_index = st.session_state.current_section_index
-current_section = current_questionnaire["sections"][current_section_index]
-current_answers = {
-    question["id"]: current_answers_snapshot.get(question["id"], "").strip()
-    for question in get_all_questions(current_questionnaire)
-}
-questionnaire_json = json.dumps(current_questionnaire, ensure_ascii=False, sort_keys=True)
-current_answers_json = serialize_answers_snapshot(current_questionnaire, current_answers)
-feedback_signature = hashlib.sha256(
-    f"{questionnaire_json}|{current_answers_json}|{llm_config['model']}|{llm_config['api_key']}".encode("utf-8")
-).hexdigest()
-
-if st.session_state.feedback_signature == feedback_signature:
-    feedback_map = dict(st.session_state.feedback_map)
-else:
-    try:
-        with st.spinner(
-            "Checking the current answers and updating completion status."
-        ):
-            feedback_map = build_answer_feedback_map(
-                questionnaire_json=questionnaire_json,
-                answers_json=current_answers_json,
-                api_key=llm_config["api_key"],
-                model=llm_config["model"],
-            )
-    except Exception as exc:
-        st.error(format_exception_message(exc, "OpenAI answer feedback failed"))
-        st.stop()
-    st.session_state.feedback_map = feedback_map
-    st.session_state.feedback_signature = feedback_signature
-
-st.caption(
-    f"Question status: {current_questionnaire.get('question_generation_note', '')}"
-)
+st.caption(base_questionnaire.get("question_generation_note", ""))
 st.info(
-    "Answer guide: Every response must be written in English. "
-    "Short answers are allowed. The app only asks for a rewrite when the answer is empty, says I don't know, or is too unclear to use. "
-    "In each part, Question 1 appears first, and Question 2 is generated from the answer to Question 1. "
-    "After editing a part, click Check This Part to refresh the feedback and unlock the next follow-up question.\n\n"
-    "답변 가이드: 짧은 답변도 가능합니다. 답이 비어 있거나 I don't know이거나 사용하기 어려울 만큼 이상한 경우에만 다시 쓰라는 안내가 나옵니다. "
-    "각 파트에서는 1번 질문이 먼저 나오고, 2번 질문은 1번 답변을 보고 생성됩니다. "
-    "답을 수정한 뒤에는 Check This Part 버튼을 눌러 피드백과 다음 질문을 새로 반영해 주세요."
+    "Generated output: The app created one CEFR-level paragraph with exactly 10 sentences and the first question based on that paragraph. "
+    "Write the learner's answer below if you want to continue testing the interface.\n\n"
+    "생성 결과: 앱이 10문장으로 된 CEFR 수준 한 문단과 그 문단을 바탕으로 한 첫 번째 질문을 만들었습니다. 아래에 답변을 적으면서 화면을 확인할 수 있습니다."
 )
 
-passage_col, question_col = st.columns([0.9, 1.3], gap="large")
-
-previous_clicked = False
-check_part_clicked = False
-next_clicked = False
-submit_clicked = False
+passage_col, question_col = st.columns([1.05, 0.95], gap="large")
 
 with passage_col:
     render_passage_panel(
-        questionnaire=current_questionnaire,
+        questionnaire=base_questionnaire,
         student_name=st.session_state.student_name_value,
         student_number=st.session_state.student_number_value,
         cefr_level=st.session_state.cefr_level_value,
@@ -2900,235 +2862,23 @@ with question_col:
     st.markdown(
         """
         <div class="question-shell">
-            <div class="panel-title">Interactive Questionnaire</div>
+            <div class="panel-title">First Question</div>
             <div class="panel-subtitle">
-                Move one part at a time. In each part, the second question opens only after the first answer is usable.
+                The paragraph was generated from the participant profile above, and Q1 was generated directly from that paragraph.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    total_questions = len(get_all_questions(current_questionnaire))
-    section_completed_questions = 0
-    section_total_questions = len(current_section["questions"])
-
-    with st.form(
-        key=f"question_section_form_{st.session_state.generation_nonce}_{current_section_index}",
-        clear_on_submit=False,
-    ):
-        render_section_header(current_section)
-        st.caption(f"Part {current_section_index + 1} of {len(current_questionnaire['sections'])}")
-
-        for question in current_section["questions"]:
-            question_key = widget_key(question["id"])
-            if not question.get("ready_for_answer", True):
-                st.session_state[question_key] = ""
-                current_answers[question["id"]] = ""
-            elif question_key not in st.session_state:
-                st.session_state[question_key] = current_answers.get(question["id"], "")
-            render_question_card(question)
-
-            answer = st.text_area(
-                f"{question['label']}. {question['prompt']}",
-                key=question_key,
-                label_visibility="collapsed",
-                height=170,
-                disabled=not question.get("ready_for_answer", True),
-                placeholder=(
-                    "Write a simple English answer. Short answers are okay."
-                    if question.get("ready_for_answer", True)
-                    else "The follow-up question will open after the first answer in this part is usable."
-                ),
-            )
-            answer = answer.strip()
-            current_answers[question["id"]] = answer
-
-            if not question.get("ready_for_answer", True):
-                render_status_box(
-                    "status-box-neutral",
-                    "This follow-up will open after the previous answer can be used to create the next question.",
-                )
-                continue
-
-            if not answer:
-                render_status_box(
-                    "status-box-neutral",
-                    "Write an answer for this question, then click Check This Part.",
-                )
-                continue
-
-            feedback = feedback_map.get(question["id"])
-            if feedback and feedback["status"] == "valid":
-                section_completed_questions += 1
-                render_status_box(
-                    "status-box-valid",
-                    f"Complete. {feedback['message']} / {feedback['message_ko']}",
-                )
-            elif feedback:
-                render_status_box(
-                    "status-box-rewrite",
-                    f"{feedback['message']} / {feedback['message_ko']}",
-                )
-            else:
-                render_status_box(
-                    "status-box-neutral",
-                    "Click Check This Part to refresh the answer check.",
-                )
-
-        completed_questions = 0
-        for question in get_all_questions(current_questionnaire):
-            answer = current_answers.get(question["id"], "").strip()
-            if not question.get("ready_for_answer", True) or not answer:
-                continue
-
-            feedback = feedback_map.get(question["id"])
-            if feedback and feedback["status"] == "valid":
-                completed_questions += 1
-
-        section_complete = section_completed_questions == section_total_questions
-
-        st.markdown("### Completion")
-        st.caption(f"Current part: {section_completed_questions} / {section_total_questions}")
-        st.progress(section_completed_questions / section_total_questions if section_total_questions else 0.0)
-        st.caption(f"Overall: {completed_questions} / {total_questions}")
-        st.progress(completed_questions / total_questions if total_questions else 0.0)
-
-        if not section_complete:
-            st.caption("Finish this part first. Then the Next button will be available.")
-
-        nav_col1, nav_col2, nav_col3 = st.columns(3)
-        with nav_col1:
-            previous_clicked = st.form_submit_button(
-                "Previous Part",
-                use_container_width=True,
-                disabled=(current_section_index == 0),
-            )
-        with nav_col2:
-            check_part_clicked = st.form_submit_button(
-                "Check This Part",
-                use_container_width=True,
-            )
-        with nav_col3:
-            if current_section_index < len(current_questionnaire["sections"]) - 1:
-                next_clicked = st.form_submit_button(
-                    "Next Part",
-                    use_container_width=True,
-                    disabled=(not section_complete or profile_changed_after_generation),
-                )
-            else:
-                submit_clicked = st.form_submit_button(
-                    "Submit Responses",
-                    use_container_width=True,
-                    disabled=(not section_complete or profile_changed_after_generation),
-                )
-
-form_submitted = previous_clicked or check_part_clicked or next_clicked or submit_clicked
-
-if form_submitted:
-    for question in current_section["questions"]:
-        question_key = widget_key(question["id"])
-        if not question.get("ready_for_answer", True):
-            st.session_state[question_key] = ""
-            current_answers[question["id"]] = ""
-            set_saved_answer(question["id"], "")
-            continue
-
-        normalized_answer = st.session_state.get(question_key, "").strip()
-        st.session_state[question_key] = normalized_answer
-        current_answers[question["id"]] = normalized_answer
-        set_saved_answer(question["id"], normalized_answer)
-
-
-if previous_clicked:
-    st.session_state.current_section_index = max(0, current_section_index - 1)
-    st.rerun()
-
-if next_clicked:
-    st.session_state.current_section_index = min(
-        len(current_questionnaire["sections"]) - 1,
-        current_section_index + 1,
+    render_section_header(first_section)
+    render_question_card(first_question)
+    st.text_area(
+        "Q1 Answer",
+        key=f"simple_q1_answer_{st.session_state.generation_nonce}",
+        height=180,
+        placeholder="Write an English answer to the first question here.",
     )
-    st.rerun()
-
-
-if submit_clicked:
-    if (
-        st.session_state.student_name_input.strip() != st.session_state.student_name_value
-        or st.session_state.student_number_input.strip() != st.session_state.student_number_value
-        or st.session_state.cefr_level_input != st.session_state.cefr_level_value
-        or st.session_state.selected_background_input != st.session_state.selected_background_value
-        or st.session_state.selected_genre_input != st.session_state.selected_genre_value
-    ):
-        st.error("Participant information or generation options changed after generation. Please generate the passage and questions again before submitting.")
-    else:
-        validation_error = validate_submission_answers(
-            questionnaire=current_questionnaire,
-            answers=current_answers,
-            llm_config=llm_config,
-            feedback_map=feedback_map,
-        )
-
-        if validation_error:
-            st.error(validation_error)
-        else:
-            submission_id = create_submission_id(
-                student_name=st.session_state.student_name_value,
-                student_number=st.session_state.student_number_value,
-            )
-
-            response_row = build_response_row(
-                submission_id=submission_id,
-                student_name=st.session_state.student_name_value,
-                student_number=st.session_state.student_number_value,
-                cefr_level=st.session_state.cefr_level_value,
-                questionnaire=current_questionnaire,
-                answers=current_answers,
-            )
-            evaluation_row = build_evaluation_row(
-                submission_id=submission_id,
-                student_name=st.session_state.student_name_value,
-                student_number=st.session_state.student_number_value,
-                cefr_level=st.session_state.cefr_level_value,
-                questionnaire=current_questionnaire,
-                answers=current_answers,
-            )
-
-            try:
-                response_save_result = save_rows(
-                    rows=[response_row],
-                    local_file_path=RESPONSES_FILE,
-                    google_worksheet_name=google_sheets_config.get("responses_worksheet", DEFAULT_RESPONSES_WORKSHEET),
-                )
-                evaluation_save_result = save_rows(
-                    rows=[evaluation_row],
-                    local_file_path=EVALUATIONS_FILE,
-                    google_worksheet_name=google_sheets_config.get("evaluations_worksheet", DEFAULT_EVALUATIONS_WORKSHEET),
-                )
-            except Exception as error:
-                st.error(
-                    "Saving failed. Please check the Google Sheets configuration in Streamlit secrets.\n\n"
-                    f"Error: {error}"
-                )
-            else:
-                st.session_state.last_submission_id = submission_id
-                st.session_state.last_storage_backend = response_save_result["backend"]
-
-                if response_save_result["backend"] == "google_sheets":
-                    st.session_state.last_response_file = (
-                        f"{response_save_result['spreadsheet_url']} / "
-                        f"{response_save_result['worksheet_name']}"
-                    )
-                    st.session_state.last_evaluation_file = (
-                        f"{evaluation_save_result['spreadsheet_url']} / "
-                        f"{evaluation_save_result['worksheet_name']}"
-                    )
-                else:
-                    st.session_state.last_response_file = response_save_result["file_path"]
-                    st.session_state.last_evaluation_file = evaluation_save_result["file_path"]
-
-                st.session_state.submission_complete = True
-                st.rerun()
 
 st.markdown("---")
-st.caption("Prototype for CEFR-based passage generation, interactive questioning, and state evaluation")
+st.caption("Prototype for CEFR-based paragraph generation and first-question display")
+st.stop()
