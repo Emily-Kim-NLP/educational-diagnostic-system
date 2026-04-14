@@ -3107,6 +3107,9 @@ if previous_clicked:
     st.session_state.current_section_index = max(0, current_section_index - 1)
     st.rerun()
 
+if check_part_clicked:
+    st.rerun()
+
 if next_clicked:
     st.session_state.current_section_index = min(
         len(current_questionnaire["sections"]) - 1,
