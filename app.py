@@ -81,10 +81,10 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "id": "q2",
                 "label": "Q2",
                 "layer": "Understanding",
-                "type": "Depth 2",
+                "type": "Self",
                 "depends_on": "q1",
-                "question_goal": "Ask a deeper understanding follow-up that connects the learner's Q1 interpretation to a key reason, cause, turning point, or important detail from the passage, while inviting a fuller connected explanation.",
-                "criteria_focus": "Generate a deeper follow-up question based on the learner's Q1 answer and the passage. Ask the learner to expand, clarify, or support their idea with a reason, key evidence, cause, turning point, or important detail from the passage. The question should invite a fuller connected response so fluency features such as explanation, connector use, linked ideas, and organization can be observed.",
+                "question_goal": "Ask an adaptive self follow-up that uses the learner's Q1 interpretation and the passage, then moves into a similar situation in the learner's own life so the learner explains what would be similar, important, or difficult in connected detail.",
+                "criteria_focus": "Generate an adaptive self follow-up based on the learner's Q1 answer and the passage. Move from the passage situation into a similar real-life situation for the learner. Ask the learner to connect their interpretation to their own experience, perspective, or likely response, while still anchoring the question in the key situation, reason, or detail from the passage. The question should invite a fuller connected response so fluency features such as explanation, connector use, linked ideas, organization, and emotional expression can be observed.",
             },
         ],
     },
@@ -242,13 +242,14 @@ Strategy
 
 PERSONALIZED_SELF_QUESTION_SPECS = {
     "q2": {
-        "state_targets": "Understanding depth / evidence",
+        "state_targets": "Understanding self-application / fluency",
         "criteria_focus": (
-            "Generate a deeper understanding follow-up question based on the learner's Q1 answer and the passage. "
-            "Ask the learner to expand, clarify, or support their interpretation with a reason, important detail, cause, turning point, or evidence from the passage. "
-            "The question should encourage a fuller connected explanation so fluency features such as sentence development, connector use, linked ideas, and organization can be observed."
+            "Generate an adaptive self follow-up question based on the learner's Q1 answer and the passage. "
+            "Move from the passage situation into a similar real-life situation for the learner. "
+            "Ask the learner to connect their interpretation to their own experience, perspective, or likely response while still anchoring the question in the key situation, reason, or detail from the passage. "
+            "The question should encourage a fuller connected explanation so fluency features such as sentence development, connector use, linked ideas, organization, and emotional expression can be observed."
         ),
-        "note": "This follow-up is linked to your answer in Q1 and asks for deeper understanding through a fuller connected explanation.",
+        "note": "This follow-up is linked to your answer in Q1 and turns the passage situation into an adaptive self question.",
     },
     "q4": {
         "state_targets": "FLA / FLE",
@@ -326,6 +327,30 @@ def normalize_service_account_info(service_account_info: dict) -> dict:
     return normalized
 
 
+def normalize_worksheet_name(value: str, default_name: str) -> str:
+    normalized = str(value or "").strip()
+    return normalized or default_name
+
+
+def resolve_google_worksheet_names(sheet_settings: dict) -> tuple[str, str]:
+    responses_worksheet = normalize_worksheet_name(
+        sheet_settings.get("responses_worksheet", ""),
+        DEFAULT_RESPONSES_WORKSHEET,
+    )
+    evaluations_worksheet = normalize_worksheet_name(
+        sheet_settings.get("evaluations_worksheet", ""),
+        DEFAULT_EVALUATIONS_WORKSHEET,
+    )
+
+    if responses_worksheet == evaluations_worksheet:
+        fallback_evaluations_name = DEFAULT_EVALUATIONS_WORKSHEET
+        if fallback_evaluations_name == responses_worksheet:
+            fallback_evaluations_name = f"{DEFAULT_EVALUATIONS_WORKSHEET}_tab"
+        evaluations_worksheet = fallback_evaluations_name
+
+    return responses_worksheet, evaluations_worksheet
+
+
 def get_google_sheets_config() -> dict:
     google_service_account = None
     sheet_settings = None
@@ -363,12 +388,14 @@ def get_google_sheets_config() -> dict:
     if not spreadsheet_id or not google_service_account:
         return {"enabled": False}
 
+    responses_worksheet, evaluations_worksheet = resolve_google_worksheet_names(sheet_settings)
+
     return {
         "enabled": True,
         "service_account": normalize_service_account_info(google_service_account),
         "spreadsheet_id": spreadsheet_id,
-        "responses_worksheet": sheet_settings.get("responses_worksheet", DEFAULT_RESPONSES_WORKSHEET),
-        "evaluations_worksheet": sheet_settings.get("evaluations_worksheet", DEFAULT_EVALUATIONS_WORKSHEET),
+        "responses_worksheet": responses_worksheet,
+        "evaluations_worksheet": evaluations_worksheet,
     }
 
 
@@ -1037,12 +1064,12 @@ def generate_personalized_self_prompt_with_openai(
         q2_understanding_guidance = """
 Additional instruction for Q2:
 - Use both the passage and the learner's Q1 answer, not only one of them.
-- Stay in the Understanding layer.
+- Keep Q2 anchored in the Understanding layer, but move it into the learner's own life as a self-applied follow-up.
+- Ask the learner to connect the main situation, problem, or key detail from the passage to a similar real-life situation for themselves.
 - Ask the learner to expand, clarify, support, or refine the idea they already gave in Q1.
 - If the learner's Q1 answer is short, partial, or grammatically weak but still meaningful, treat it as usable and build the next question from the main idea the learner actually gave.
-- Anchor the follow-up in a reason, key detail, cause, turning point, or evidence from the passage.
-- Make the question open enough to invite a longer connected response, not a yes/no answer or a single quoted detail.
-- Help reveal fluency features such as sentence development, connector use, linked ideas, organization, and explanation.
+- Keep the question open enough to invite a longer connected response, not a yes/no answer or a single quoted detail.
+- Help reveal fluency features such as sentence development, connector use, linked ideas, organization, and emotional expression.
 """.strip()
 
     system_prompt = """
@@ -1051,7 +1078,7 @@ Return valid JSON only.
 The question must be the second question in a part and must clearly connect to the learner's answer to the first question.
 If the follow-up question type is Self, it must move into the learner's own experience in a similar real-life situation.
 If the follow-up question type is Depth 2, it must stay focused on the passage and deepen the learner's reasoning.
-If the follow-up is Q2 in the Understanding section, it must clearly use both the passage and the learner's Q1 answer, and it should invite a fuller connected explanation so fluency features such as sentence development, connector use, linked ideas, and organization can be observed. Even when the learner's Q1 answer is short, partial, or grammatically weak, use the meaningful part of that answer instead of treating it as unusable.
+If the follow-up is Q2 in the Understanding section, it must clearly use both the passage and the learner's Q1 answer, then turn that into a self-applied follow-up about a similar real-life situation for the learner. It should invite a fuller connected explanation so fluency features such as sentence development, connector use, linked ideas, organization, and emotional expression can be observed. Even when the learner's Q1 answer is short, partial, or grammatically weak, use the meaningful part of that answer instead of treating it as unusable.
 Use simple, learner-friendly English.
 Do not mention technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or strategy type.
 Make the Korean translation natural and faithful.
@@ -2142,15 +2169,26 @@ def set_saved_answer(question_id: str, answer: str):
     st.session_state.saved_answers = saved_answers
 
 
+def get_effective_answer(question_id: str, saved_answers: dict | None = None) -> str:
+    if saved_answers is None:
+        saved_answers = get_saved_answers()
+
+    widget_value = str(st.session_state.get(widget_key(question_id), "")).strip()
+    saved_value = str(saved_answers.get(question_id, "")).strip()
+
+    if widget_value:
+        return widget_value
+    if saved_value:
+        return saved_value
+    return ""
+
+
 def build_answers_snapshot(questionnaire: dict) -> dict:
     saved_answers = get_saved_answers()
     snapshot = {}
 
     for question in get_all_questions(questionnaire):
-        snapshot[question["id"]] = st.session_state.get(
-            widget_key(question["id"]),
-            saved_answers.get(question["id"], ""),
-        ).strip()
+        snapshot[question["id"]] = get_effective_answer(question["id"], saved_answers)
 
     return snapshot
 
@@ -2878,7 +2916,8 @@ if google_sheets_config["enabled"]:
     st.success(
         "Storage mode: Google Sheets\n\n"
         f"Spreadsheet ID: `{google_sheets_config['spreadsheet_id']}`\n\n"
-        f"Worksheets: `{google_sheets_config['responses_worksheet']}` and `{google_sheets_config['evaluations_worksheet']}`"
+        f"Responses tab: `{google_sheets_config['responses_worksheet']}`\n\n"
+        f"Evaluations tab: `{google_sheets_config['evaluations_worksheet']}`"
     )
 else:
     st.info(
@@ -3031,8 +3070,12 @@ with question_col:
             if not question.get("ready_for_answer", True):
                 st.session_state[question_key] = ""
                 current_answers[question["id"]] = ""
-            elif question_key not in st.session_state:
-                st.session_state[question_key] = current_answers.get(question["id"], "")
+            else:
+                effective_answer = current_answers.get(question["id"], "")
+                if question_key not in st.session_state or (
+                    not str(st.session_state.get(question_key, "")).strip() and effective_answer
+                ):
+                    st.session_state[question_key] = effective_answer
             render_question_card(question)
 
             answer = st.text_area(
@@ -3151,6 +3194,41 @@ if previous_clicked:
     st.rerun()
 
 if check_part_clicked:
+    refreshed_answers_snapshot = build_answers_snapshot(base_questionnaire)
+    refreshed_answers_json = serialize_answers_snapshot(base_questionnaire, refreshed_answers_snapshot)
+    refreshed_materialized_signature = hashlib.sha256(
+        f"{base_questionnaire_json}|{refreshed_answers_json}|{llm_config['model']}|{llm_config['api_key']}".encode("utf-8")
+    ).hexdigest()
+
+    try:
+        refreshed_questionnaire = materialize_questionnaire_for_answers_cached(
+            questionnaire_json=base_questionnaire_json,
+            answers_json=refreshed_answers_json,
+            api_key=llm_config["api_key"],
+            model=llm_config["model"],
+        )
+        refreshed_questionnaire_json = json.dumps(refreshed_questionnaire, ensure_ascii=False, sort_keys=True)
+        refreshed_feedback_map = build_answer_feedback_map(
+            questionnaire_json=refreshed_questionnaire_json,
+            answers_json=refreshed_answers_json,
+            api_key=llm_config["api_key"],
+            model=llm_config["model"],
+        )
+    except Exception as error:
+        st.error(
+            "Refreshing this part failed.\n\n"
+            f"Error: {format_exception_message(error)}"
+        )
+        st.stop()
+
+    refreshed_feedback_signature = hashlib.sha256(
+        f"{refreshed_questionnaire_json}|{refreshed_answers_json}|{llm_config['model']}|{llm_config['api_key']}".encode("utf-8")
+    ).hexdigest()
+
+    st.session_state.materialized_questionnaire = refreshed_questionnaire
+    st.session_state.materialized_signature = refreshed_materialized_signature
+    st.session_state.feedback_map = refreshed_feedback_map
+    st.session_state.feedback_signature = refreshed_feedback_signature
     st.rerun()
 
 if next_clicked:
