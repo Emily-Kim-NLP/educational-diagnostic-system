@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Mapping
 from copy import deepcopy
 from datetime import datetime
 from uuid import uuid4
@@ -104,15 +105,21 @@ def _get_secret_dict(key: str) -> dict:
     except Exception:
         return {}
 
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return dict(value)
     return {}
 
 
 def get_llm_config() -> dict:
     openai_config = _get_secret_dict("openai")
+    try:
+        top_level_api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+    except Exception:
+        top_level_api_key = ""
+
     api_key = (
         str(openai_config.get("api_key", "")).strip()
+        or top_level_api_key
         or str(os.environ.get("OPENAI_API_KEY", "")).strip()
     )
     model = str(openai_config.get("model", "")).strip() or DEFAULT_LLM_MODEL
