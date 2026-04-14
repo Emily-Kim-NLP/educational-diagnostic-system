@@ -99,6 +99,14 @@ def get_openai_client(api_key: str) -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
+def format_exception_message(exc: Exception, prefix: str = "") -> str:
+    detail = str(exc).strip() or "No error message was provided."
+    exc_name = type(exc).__name__
+    if prefix:
+        return f"{prefix} ({exc_name}): {detail}"
+    return f"{exc_name}: {detail}"
+
+
 def _get_secret_dict(key: str) -> dict:
     try:
         value = st.secrets.get(key, {})
@@ -694,21 +702,16 @@ def build_generated_experiment(
     if not api_key:
         raise ValueError("OpenAI API key is required to generate the passage and questions.")
 
-    try:
-        return generate_experiment_with_openai(
-            cefr_level=cefr_level,
-            student_name=student_name,
-            student_number=student_number,
-            variation_seed=nonce[:12],
-            selected_background=selected_background,
-            selected_genre=selected_genre,
-            api_key=api_key,
-            model=model,
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            "OpenAI generation failed. Please check the API key, model setting, and prompt output format, then try again."
-        ) from exc
+    return generate_experiment_with_openai(
+        cefr_level=cefr_level,
+        student_name=student_name,
+        student_number=student_number,
+        variation_seed=nonce[:12],
+        selected_background=selected_background,
+        selected_genre=selected_genre,
+        api_key=api_key,
+        model=model,
+    )
 
 
 # -----------------------------
@@ -825,14 +828,6 @@ def build_basic_answer_feedback(answer: str) -> dict:
     }
 
 
-def build_unavailable_answer_feedback() -> dict:
-    return {
-        "status": "valid",
-        "message": "LLM feedback is temporarily unavailable. Your answer is still recorded.",
-        "message_ko": "LLM 피드백을 일시적으로 사용할 수 없지만 답변은 기록됩니다.",
-    }
-
-
 def generate_answer_feedback_with_openai(
     questionnaire: dict,
     question: dict,
@@ -883,18 +878,15 @@ def get_answer_feedback(
         return basic_feedback
 
     if not api_key:
-        return build_unavailable_answer_feedback()
+        raise ValueError("OpenAI API key is required for answer feedback generation.")
 
-    try:
-        return generate_answer_feedback_with_openai(
-            questionnaire=questionnaire,
-            question=question,
-            answer=answer,
-            api_key=api_key,
-            model=model,
-        )
-    except Exception:
-        return build_unavailable_answer_feedback()
+    return generate_answer_feedback_with_openai(
+        questionnaire=questionnaire,
+        question=question,
+        answer=answer,
+        api_key=api_key,
+        model=model,
+    )
 
 
 def build_pending_self_prompt(
@@ -924,18 +916,6 @@ def build_pending_self_prompt(
             f"{source_question['label']}을 먼저 다시 작성해 주세요. {reason_ko}"
         ),
         "ready_for_answer": False,
-    }
-
-
-def build_base_personalized_self_prompt(question: dict) -> dict:
-    spec = get_personalized_self_spec(question["id"])
-
-    return {
-        "prompt": question.get("base_prompt", question.get("prompt", "")),
-        "prompt_ko": question.get("base_prompt_ko", question.get("prompt_ko", "")),
-        "prompt_source": "base_prompt",
-        "prompt_note": spec["note"],
-        "ready_for_answer": True,
     }
 
 
@@ -1001,19 +981,16 @@ def build_personalized_self_prompt(
         return build_pending_self_prompt(question, source_question, source_feedback)
 
     if not api_key:
-        return build_base_personalized_self_prompt(question)
+        raise ValueError("OpenAI API key is required for personalized follow-up generation.")
 
-    try:
-        return generate_personalized_self_prompt_with_openai(
-            questionnaire=questionnaire,
-            question=question,
-            source_question=source_question,
-            source_answer=source_answer,
-            api_key=api_key,
-            model=model,
-        )
-    except Exception:
-        return build_base_personalized_self_prompt(question)
+    return generate_personalized_self_prompt_with_openai(
+        questionnaire=questionnaire,
+        question=question,
+        source_question=source_question,
+        source_answer=source_answer,
+        api_key=api_key,
+        model=model,
+    )
 
 
 def materialize_questionnaire_for_answers(
@@ -2764,7 +2741,7 @@ if generate_clicked:
                     nonce=generation_nonce,
                 )
         except Exception as exc:
-            st.error(str(exc))
+            st.error(format_exception_message(exc, "OpenAI generation failed"))
         else:
             clear_question_widgets()
             st.session_state.saved_answers = {}
@@ -2838,16 +2815,20 @@ materialized_signature = hashlib.sha256(
 if st.session_state.materialized_signature == materialized_signature:
     current_questionnaire = deepcopy(st.session_state.materialized_questionnaire)
 else:
-    with st.spinner(
-        "Analyzing answers and preparing the next interactive question. "
-        "The loading indicator is centered to keep the experiment flow clear for participants."
-    ):
-        current_questionnaire = materialize_questionnaire_for_answers_cached(
-            questionnaire_json=base_questionnaire_json,
-            answers_json=base_answers_json,
-            api_key=llm_config["api_key"],
-            model=llm_config["model"],
-        )
+    try:
+        with st.spinner(
+            "Analyzing answers and preparing the next interactive question. "
+            "The loading indicator is centered to keep the experiment flow clear for participants."
+        ):
+            current_questionnaire = materialize_questionnaire_for_answers_cached(
+                questionnaire_json=base_questionnaire_json,
+                answers_json=base_answers_json,
+                api_key=llm_config["api_key"],
+                model=llm_config["model"],
+            )
+    except Exception as exc:
+        st.error(format_exception_message(exc, "OpenAI follow-up generation failed"))
+        st.stop()
     st.session_state.materialized_questionnaire = current_questionnaire
     st.session_state.materialized_signature = materialized_signature
     st.session_state.feedback_map = {}
@@ -2871,15 +2852,19 @@ feedback_signature = hashlib.sha256(
 if st.session_state.feedback_signature == feedback_signature:
     feedback_map = dict(st.session_state.feedback_map)
 else:
-    with st.spinner(
-        "Checking the current answers and updating completion status."
-    ):
-        feedback_map = build_answer_feedback_map(
-            questionnaire_json=questionnaire_json,
-            answers_json=current_answers_json,
-            api_key=llm_config["api_key"],
-            model=llm_config["model"],
-        )
+    try:
+        with st.spinner(
+            "Checking the current answers and updating completion status."
+        ):
+            feedback_map = build_answer_feedback_map(
+                questionnaire_json=questionnaire_json,
+                answers_json=current_answers_json,
+                api_key=llm_config["api_key"],
+                model=llm_config["model"],
+            )
+    except Exception as exc:
+        st.error(format_exception_message(exc, "OpenAI answer feedback failed"))
+        st.stop()
     st.session_state.feedback_map = feedback_map
     st.session_state.feedback_signature = feedback_signature
 
