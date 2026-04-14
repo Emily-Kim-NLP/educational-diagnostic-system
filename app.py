@@ -318,17 +318,25 @@ def normalize_private_key(private_key: str) -> str:
     normalized = normalized.replace("\\n", "\n")
     normalized = normalized.replace("\r\n", "\n")
 
-    result_lines = []
-    for line in normalized.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith("-----"):
-            result_lines.append(line)
-        else:
-            # Convert URL-safe base64 characters to standard base64
-            result_lines.append(line.replace("-", "+").replace("_", "/"))
-    return "\n".join(result_lines) + "\n"
+    lines = [line.strip() for line in normalized.split("\n") if line.strip()]
+    if not lines:
+        return ""
+
+    header = lines[0] if lines[0].startswith("-----BEGIN") else "-----BEGIN PRIVATE KEY-----"
+    footer = lines[-1] if lines[-1].startswith("-----END") else "-----END PRIVATE KEY-----"
+    body_lines = lines[1:-1] if lines[0].startswith("-----BEGIN") and lines[-1].startswith("-----END") else lines
+
+    # Join body and normalize URL-safe base64 → standard base64
+    body = "".join(body_lines)
+    body = body.replace("-", "+").replace("_", "/")
+
+    # Fix missing base64 padding
+    padding_needed = (4 - len(body) % 4) % 4
+    body += "=" * padding_needed
+
+    # Re-chunk into standard 64-character lines
+    chunked = "\n".join(body[i:i + 64] for i in range(0, len(body), 64))
+    return f"{header}\n{chunked}\n{footer}\n"
 
 
 def normalize_service_account_info(service_account_info: dict) -> dict:
