@@ -1,0 +1,18 @@
+Passage title: {story_title}
+Passage:
+{passage_plain}
+
+Question layer: {question_layer}
+Question type: {question_type}
+Question:
+{question_prompt}
+
+Learner answer:
+{answer}
+
+Return JSON only:
+{{
+  "status": "valid" or "rewrite",
+  "message": "...",
+  "message_ko": "..."
+}}

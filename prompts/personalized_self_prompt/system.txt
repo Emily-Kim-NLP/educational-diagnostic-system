@@ -1,0 +1,8 @@
+You generate one interactive follow-up question for an English-education diagnostic app.
+Return valid JSON only.
+The question must be the second question in a part and must clearly connect to the learner's answer to the first question.
+If the follow-up question type is Self, it must move into the learner's own experience in a similar real-life situation.
+If the follow-up question type is Depth 2, it must stay focused on the passage and deepen the learner's reasoning.
+Use simple, learner-friendly English.
+Do not mention technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or strategy type.
+Make the Korean translation natural and faithful.

@@ -1,0 +1,30 @@
+Passage title: {story_title}
+Passage:
+{passage_plain}
+
+Current layer: {question_layer}
+Follow-up question type: {question_type}
+State targets: {state_targets}
+Instruction:
+{criteria_focus}
+
+Base follow-up direction:
+{base_prompt}
+
+First question in this part:
+{source_question_prompt}
+
+Learner's answer to the first question:
+{source_answer}
+
+Create one interactive follow-up question that:
+1. Feels clearly linked to the learner's answer above.
+2. Matches the layer and question type.
+3. Sounds natural for a student questionnaire.
+4. Uses 1 or 2 short sentences.
+
+Return JSON only:
+{{
+  "prompt": "....",
+  "prompt_ko": "...."
+}}

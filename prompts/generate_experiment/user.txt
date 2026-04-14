@@ -1,0 +1,44 @@
+Target CEFR level: {cefr_level}
+Participant name: {student_name}
+Participant number: {student_number}
+Variation seed: {variation_seed}
+Selected personal background: {selected_background}
+Selected genre: {selected_genre}
+
+Create a noticeably different passage across participants when possible.
+
+Design guidance:
+- Respect the selected background and genre throughout the passage.
+- The passage can be about English learning or any broader real-life situation, as long as it contains clear feelings, thoughts, decisions, and coping or strategy opportunities.
+- Let the 10 sentences move through introduction, development, tension or decision, and ending.
+- Make the questions useful for evaluation, but phrase them naturally for students.
+- Give students room to show fluency through connected explanation, not only through one-word or one-phrase answers.
+
+Evaluation criteria:
+{question_generation_criteria}
+
+Question slots:
+{question_slot_instructions}
+
+Return JSON only in this format:
+{{
+  "story_title": "...",
+  "story_title_ko": "...",
+  "central_characters": "...",
+  "situation_focus": "...",
+  "situation_focus_ko": "...",
+  "passage_sentences": ["...", "...", "...", "...", "...", "...", "...", "...", "...", "..."],
+  "passage_ko_sentences": ["...", "...", "...", "...", "...", "...", "...", "...", "...", "..."],
+  "questions": [
+    {{"id": "q1", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q2", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q3", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q4", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q5", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q6", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q7", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q8", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q9", "prompt": "....", "prompt_ko": "...."}},
+    {{"id": "q10", "prompt": "....", "prompt_ko": "...."}}
+  ]
+}}

@@ -28,6 +28,7 @@ st.set_page_config(
 # Constants
 # -----------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROMPTS_DIR = os.path.join(BASE_DIR, "prompts")
 OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 RESPONSES_DIR = os.path.join(OUTPUT_DIR, "responses")
 EVALUATIONS_DIR = os.path.join(OUTPUT_DIR, "evaluations")
@@ -38,6 +39,19 @@ EVALUATIONS_FILE = os.path.join(EVALUATIONS_DIR, "state_evaluations.csv")
 DEFAULT_RESPONSES_WORKSHEET = "questionnaire_responses"
 DEFAULT_EVALUATIONS_WORKSHEET = "state_evaluations"
 DEFAULT_LLM_MODEL = "gpt-5-mini"
+
+
+class PromptFormatDict(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+
+def load_prompt_template(*path_parts: str, **context) -> str:
+    prompt_path = os.path.join(PROMPTS_DIR, *path_parts)
+    with open(prompt_path, "r", encoding="utf-8") as prompt_file:
+        template = prompt_file.read().strip()
+    return template.format_map(PromptFormatDict(context))
+
 
 MIN_SENTENCES = 1
 RECOMMENDED_SENTENCES = 2
@@ -97,7 +111,7 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q3",
                 "layer": "Emotion",
                 "type": "Character",
-                "question_goal": "Ask how the main character feels in the situation and what in the passage shows that emotion.",
+                "question_goal": "Ask how the main character feels in the situation, and make the learner identify emotional evidence linked to anxiety, motivation, or enjoyment without using technical labels.",
             },
             {
                 "id": "q4",
@@ -105,8 +119,8 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "layer": "Emotion",
                 "type": "Self",
                 "depends_on": "q3",
-                "question_goal": "Ask how the learner would feel in a similar situation in their own life.",
-                "criteria_focus": "Target anxiety versus enjoyment without naming technical labels. Encourage feelings such as nervous, worried, afraid, comfortable, relaxed, interested, happy, or enjoying the situation.",
+                "question_goal": "Ask how the learner would feel in a similar situation in their own life, in a way that can reveal anxiety, motivation, and enjoyment.",
+                "criteria_focus": "Target the learner's emotional state without naming technical labels. The question should create room to reveal anxiety, motivation, and enjoyment through ideas such as nervousness, fear of mistakes, willingness to keep trying, personal goals, classroom enjoyment, sense of achievement, or feeling supported by others.",
             },
         ],
     },
@@ -119,7 +133,7 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q5",
                 "layer": "Cognition",
                 "type": "Character",
-                "question_goal": "Ask what the main character might think, believe, or worry about in that moment.",
+                "question_goal": "Ask what the main character might think, believe, or worry about in that moment, so the learner can infer confidence, self-regulation, and beliefs about the causes of success or difficulty.",
             },
             {
                 "id": "q6",
@@ -127,8 +141,8 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "layer": "Cognition",
                 "type": "Self",
                 "depends_on": "q5",
-                "question_goal": "Ask what the learner would think about their own ability and how they would notice or manage difficulty in a similar situation.",
-                "criteria_focus": "Target confidence and metacognitive reflection without naming technical labels. Encourage reflection on ability, confidence, noticing problems, and managing or improving performance in a natural way.",
+                "question_goal": "Ask what the learner would think about their own ability, how they would notice or manage difficulty, and how they would explain the cause of success or difficulty in a similar situation.",
+                "criteria_focus": "Target self-efficacy, metacognitive regulation, and attribution-beliefs without naming technical labels. Encourage reflection on confidence, planning, noticing problems, checking understanding, choosing strategies, and explaining why success or difficulty happened.",
             },
         ],
     },
@@ -163,7 +177,7 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "label": "Q9",
                 "layer": "Strategy",
                 "type": "Character",
-                "question_goal": "Ask what the best strategy is for the character and why it would work in that situation.",
+                "question_goal": "Ask what the best strategy is for the character and why it would work in that situation, with room to reveal a specific Oxford strategy type and the quality of the strategy choice.",
             },
             {
                 "id": "q10",
@@ -171,8 +185,8 @@ QUESTION_SECTION_BLUEPRINTS = [
                 "layer": "Strategy",
                 "type": "Self",
                 "depends_on": "q9",
-                "question_goal": "Ask what strategy would help the learner most in a similar situation in their own life.",
-                "criteria_focus": "Target strategy type and quality without naming technical labels. Encourage strategy examples such as practice, planning, calming down, asking others, guessing, or using simple words.",
+                "question_goal": "Ask what strategy would help the learner most in a similar situation in their own life, with room to reveal a specific Oxford strategy type and the quality of the strategy choice.",
+                "criteria_focus": "Target Oxford's six strategy types and strategy quality without naming technical labels. Encourage answers that can reveal memory, compensation, cognitive, metacognitive, social, or affective strategies, and whether the strategy is effective, limited, or avoidant in that situation.",
             },
         ],
     },
@@ -182,35 +196,72 @@ QUESTION_GENERATION_CRITERIA = """
 Layer and evaluation targets:
 
 Fluency
-- Low: very short or isolated responses with little connection between ideas.
-- Mid: basic connected response using at least one connector such as and, because, but, so, when, if, or then.
-- High: longer and more organized response with connected ideas, some clause or sentence complexity, clear flow, and an explanation of what the learner would do, think, or try.
+- Linguistic Fluency
+  Low: very short, hesitant, or fragment-like responses with frequent pauses in idea flow and little forward development.
+  Mid: understandable connected response with some continuation of ideas, though pacing may still feel stop-and-go or uneven.
+  High: smooth and sustained response that develops ideas with little strain, keeps moving forward, and sounds relatively easy to follow.
+- Complexity
+  Low: mostly isolated words, short phrases, or very simple sentence patterns with little expansion.
+  Mid: some sentence expansion and combination of ideas using basic clauses, connectors, or supporting detail.
+  High: varied and well-developed sentence structures with clear clause combination, explanation, and more elaborated expression.
+- Accuracy
+  Low: frequent grammar, word form, or sentence errors that often interfere with clarity.
+  Mid: noticeable errors are present, but the main meaning is usually clear and the learner can still communicate the answer.
+  High: generally controlled grammar and sentence formation with only minor errors that do not reduce clarity.
+- Lexical Diversity
+  Low: very limited vocabulary with heavy repetition of the same basic words or expressions.
+  Mid: some range of familiar vocabulary with occasional variation beyond the most basic repeated words.
+  High: a wider and more purposeful range of vocabulary with flexible word choice that supports explanation and nuance.
+- Cohesion
+  Low: ideas are loosely connected or disconnected, with little use of linking language or logical ordering.
+  Mid: ideas are connected with basic linking words such as and, because, but, so, when, if, or then, though organization may still be simple.
+  High: ideas are clearly connected and organized with effective linking, sequencing, and logical progression across the response.
 - Observable features to support fluency judgment:
-  Sentence length: enough development beyond a fragment or one short line.
-  Connector use: and, because, but, so, when, if, or then.
-  Structure complexity: clauses, combined ideas, or more than one linked statement.
-  Organization: order or logic such as first, next, then, later, finally, so, or in the end.
-  Strategy expression: explaining a solution, plan, reason, coping action, or next step.
+  Linguistic fluency: continuity of response, amount of development, and whether the answer moves forward without collapsing into fragments.
+  Complexity: use of clauses, sentence expansion, combined ideas, and explanation beyond a single short statement.
+  Accuracy: control of grammar, sentence form, agreement, tense, and whether errors interfere with understanding.
+  Lexical diversity: range of vocabulary, variation in word choice, and reduced dependence on repeated basic expressions.
+  Cohesion: connector use, sequencing, reference between ideas, and overall logical flow such as first, next, then, later, finally, so, or in the end.
 
 Emotion
-- FLA (Foreign Language Anxiety)
-  High: strong anxiety expressions such as nervous, afraid, worry, avoid speaking.
-  Mid: anxiety plus control expressions such as nervous but try, worried but prepare.
-  Low: almost no anxiety such as comfortable, relaxed.
-- FLE (Foreign Language Enjoyment)
-  High: clear enjoyment or interest such as enjoy, fun, interesting, happy.
-  Mid: mixed positive and neutral such as okay, sometimes enjoyable.
-  Low: low interest or negative response such as boring, do not like.
+- Anxiety: Foreign Language Classroom Anxiety (외국어 학습 불안)
+  Representative scale: FLCAS (Foreign Language Classroom Anxiety Scale)
+  Key indicators: communication apprehension, test anxiety, fear of negative evaluation.
+  High: strong anxiety expressions such as nervous, afraid, worried about mistakes, avoiding speaking, or fear of classmates' or teacher's judgment.
+  Mid: anxiety is present but partly managed, such as nervous but try, worried but prepare, or afraid yet still attempt to respond.
+  Low: little anxiety is shown; the learner sounds comfortable, relaxed, or not especially worried about speaking or evaluation.
+- Motivation: L2 Motivational Self System (제2언어 동기 자아 체계)
+  Representative scale: L2MSS
+  Key indicators: ideal L2 self, ought-to L2 self, L2 learning experience.
+  High: clear future-oriented motivation, personal goals, or meaningful reasons for learning, such as wanting to become a capable English user or valuing the learning experience.
+  Mid: some motivation is visible, but goals or reasons are limited, externally driven, or not well elaborated.
+  Low: weak motivation, little personal investment, or no clear reason for continued effort.
+- Enjoyment: Foreign Language Enjoyment (외국어 즐거움)
+  Representative scale: FLE Scale
+  Key indicators: classroom joy, sense of achievement, bonding with teacher or peers.
+  High: clear enjoyment or positive activation such as fun, interest, pride, achievement, or feeling supported in class.
+  Mid: mixed positive and neutral emotion such as okay, sometimes enjoyable, or partly interested.
+  Low: low enjoyment or negative feeling such as boring, uncomfortable, not enjoyable, or emotionally disengaged.
 
 Cognition
-- Self-efficacy
-  High: confidence about performance such as I can speak well, I am confident.
-  Mid: limited confidence such as I can, but..., simple English only.
-  Low: low belief in performance such as I cannot speak, I will make mistakes.
-- Metacognition
-  High: self-awareness plus regulation such as I know my problem and try to fix it.
-  Mid: partial awareness such as I know I am weak, but no clear action.
-  Low: little or no reflection.
+- Self-efficacy: Language Learning Self-Efficacy (자기 인식)
+  Representative scale: ASLSE
+  Key indicators: task performance confidence.
+  High: strong confidence about completing the task or communicating meaning, such as I can do this, I can explain it, or I can speak well enough.
+  Mid: partial or conditional confidence such as I can, but only with help, simple English, or extra time.
+  Low: weak confidence and expectation of failure such as I cannot do it, I will fail, or I cannot express my ideas.
+- Metacognition: Metacognition / Self-regulation (자기 조절)
+  Representative scales: MAI / SILL
+  Key indicators: planning, monitoring, strategy selection.
+  High: clear evidence of planning, checking understanding, noticing problems, and choosing a strategy to improve performance.
+  Mid: some awareness of learning process is present, but regulation is partial, vague, or inconsistent.
+  Low: little evidence of planning, monitoring, self-checking, or deliberate strategy choice.
+- Attribution / Beliefs: Attribution / Beliefs (원인 인식)
+  Representative scale: Attribution Scale
+  Key indicators: interpretation of success and failure causes.
+  High: the learner clearly explains causes of success or difficulty in a thoughtful way, linking outcomes to effort, strategy use, preparation, task conditions, or controllable factors.
+  Mid: the learner gives a simple or partly developed cause, but the interpretation is limited or only somewhat reflective.
+  Low: the learner shows little causal reflection, gives no reason, or uses very fixed or unexamined beliefs about success and failure.
 
 Behavior
 - WTC (Willingness to Communicate)
@@ -227,17 +278,17 @@ Behavior
   Low: non-participation such as passive, no interaction.
 
 Strategy
-- Strategy Type
-  Cognitive: practice, repetition, note-taking.
-  Metacognitive: planning, monitoring, self-check.
-  Affective: calming, positive thinking, anxiety control.
-  Social: asking, interacting, peer learning.
-  Compensation: guessing, using gestures, using simple words.
-  Mixed: using two or more strategy types together.
+- Strategy Type (Oxford's six language learning strategies)
+  Memory: storing and retrieving language through review, grouping, imagery, association, or repetition.
+  Compensation: overcoming knowledge gaps by guessing, paraphrasing, using gestures, or using simpler language.
+  Cognitive: practicing, analyzing, summarizing, note-taking, repeating, or manipulating language directly.
+  Metacognitive: planning, monitoring, organizing, evaluating, and managing learning.
+  Social: asking questions, cooperating with others, and learning through interaction.
+  Affective: controlling feelings, reducing anxiety, encouraging oneself, and managing emotions.
 - Strategy Quality
   Effective: strategy matches the goal and shows regulation.
-  Limited: simple or repetitive strategy such as only memorize.
-  Avoidant: mainly avoidance.
+  Limited: strategy is simple, narrow, repetitive, or only partly matched to the task.
+  Avoidant: response relies mainly on withdrawal or avoidance instead of a helpful learning strategy.
 """
 
 PERSONALIZED_SELF_QUESTION_SPECS = {
@@ -247,43 +298,21 @@ PERSONALIZED_SELF_QUESTION_SPECS = {
             "Generate a deeper understanding follow-up question based on the learner's answer to Q1. "
             "Ask the learner to explain an important detail, cause, turning point, reason, or evidence from the passage."
         ),
-        "fallback_en": (
-            "Based on your answer to Q1, which detail from the passage best supports your idea? Explain a little more."
-        ),
-        "fallback_ko": (
-            "Q1에 대한 당신의 답을 바탕으로, 지문에서 당신의 생각을 가장 잘 뒷받침하는 세부 내용은 무엇인가요? 조금 더 설명해 보세요."
-        ),
         "note": "This follow-up is linked to your answer in Q1 and asks for deeper understanding.",
     },
     "q4": {
-        "state_targets": "FLA / FLE",
+        "state_targets": "Anxiety / Motivation / Enjoyment",
         "criteria_focus": (
             "Generate a self question for a similar real-life situation that connects the learner's character-emotion answer "
-            "to their own emotional state. It should help reveal anxiety versus enjoyment without naming technical labels."
-        ),
-        "fallback_en": (
-            "In a similar situation in your own life, how would you feel? "
-            "Would you feel nervous, comfortable, interested, happy, or something else? Explain why."
-        ),
-        "fallback_ko": (
-            "당신의 삶에서 비슷한 상황이라면 어떤 기분이 들까요? "
-            "긴장되는지, 편안한지, 흥미로운지, 행복한지, 또는 다른 감정이 드는지와 그 이유를 설명해 보세요."
+            "to their own emotional state. It should help reveal anxiety, motivation, and enjoyment without naming technical labels."
         ),
         "note": "This follow-up is linked to your answer in Q3 and checks your emotion in a similar situation.",
     },
     "q6": {
-        "state_targets": "Self-efficacy / Metacognition",
+        "state_targets": "Self-efficacy / Metacognition / Attribution-Beliefs",
         "criteria_focus": (
             "Generate a self question for a similar real-life situation that connects the learner's character-thinking answer "
-            "to their own confidence, self-awareness, noticing problems, and regulation."
-        ),
-        "fallback_en": (
-            "In a similar situation in your own life, what would you think about your own ability? "
-            "How would you notice your problem and try to manage it?"
-        ),
-        "fallback_ko": (
-            "당신의 삶에서 비슷한 상황이라면 자신의 능력에 대해 어떤 생각이 들까요? "
-            "자신의 문제를 어떻게 알아차리고 어떻게 관리하려고 할지도 설명해 보세요."
+            "to their own confidence, self-awareness, planning, noticing problems, regulation, and beliefs about why success or difficulty happens."
         ),
         "note": "This follow-up is linked to your answer in Q5 and checks your thinking in a similar situation.",
     },
@@ -293,1183 +322,17 @@ PERSONALIZED_SELF_QUESTION_SPECS = {
             "Generate a self question for a similar real-life situation that connects the learner's character-behavior answer "
             "to their own willingness to communicate, coping under difficulty, and participation."
         ),
-        "fallback_en": (
-            "In a similar situation in your own life, what would you do? "
-            "Would you speak, stay quiet, ask for help, prepare more, practice more, or avoid it? Explain."
-        ),
-        "fallback_ko": (
-            "당신의 삶에서 비슷한 상황이라면 어떻게 행동할까요? "
-            "말하려고 하는지, 조용히 있는지, 도움을 요청하는지, 더 준비하거나 연습하는지, 또는 피하려고 하는지 설명해 보세요."
-        ),
         "note": "This follow-up is linked to your answer in Q7 and checks your behavior in a similar situation.",
     },
     "q10": {
-        "state_targets": "Strategy Type / Strategy Quality",
+        "state_targets": "Oxford Strategy Type / Strategy Quality",
         "criteria_focus": (
             "Generate a self question for a similar real-life situation that connects the learner's character-strategy answer "
-            "to their own learning strategies. It should help reveal strategy type and quality without naming the labels."
-        ),
-        "fallback_en": (
-            "In a similar situation in your own life, what strategy would help you most? "
-            "Explain what you would do and how it helps you."
-        ),
-        "fallback_ko": (
-            "당신의 삶에서 비슷한 상황이라면 어떤 전략이 가장 도움이 될까요? "
-            "무엇을 할 것인지와 그것이 어떻게 도움이 되는지 설명해 보세요."
+            "to their own learning strategies. It should help reveal one or more Oxford strategy types and the quality of the strategy choice without naming the labels."
         ),
         "note": "This follow-up is linked to your answer in Q9 and checks your strategy use in a similar situation.",
     },
 }
-
-FALLBACK_PASSAGES_BY_LEVEL = {
-    "A1": {
-        "story_title": "Mina's English Turn",
-        "story_title_ko": "Mina의 영어 발표 차례",
-        "character_focus": "Mina",
-        "relationship_focus": "Mina and her English class",
-        "relationship_focus_ko": "Mina와 영어 수업",
-        "passage_sentences": [
-            "Mina is in English class.",
-            "Her teacher asks her to read a short answer.",
-            "Mina feels nervous because many students are looking at her.",
-            "She remembers the words, but her voice becomes small.",
-            "Her friend smiles and tells her that she can do it.",
-            "Mina must decide if she will speak clearly or stay quiet.",
-        ],
-        "passage_ko_sentences": [
-            "Mina는 영어 수업에 있습니다.",
-            "선생님은 Mina에게 짧은 답을 읽어 보라고 합니다.",
-            "많은 학생들이 자신을 보고 있어서 Mina는 긴장합니다.",
-            "단어는 기억나지만 목소리가 작아집니다.",
-            "친구는 미소를 지으며 할 수 있다고 말해 줍니다.",
-            "Mina는 분명하게 말할지 조용히 있을지 결정해야 합니다.",
-        ],
-    },
-    "A2": {
-        "story_title": "Jisoo's Pair Talk",
-        "story_title_ko": "Jisoo의 짝 활동 대화",
-        "character_focus": "Jisoo",
-        "relationship_focus": "Jisoo and her partner",
-        "relationship_focus_ko": "Jisoo와 짝 친구",
-        "passage_sentences": [
-            "Jisoo has a pair-speaking activity in English class.",
-            "She knows the topic, but she worries about making mistakes.",
-            "Her partner starts speaking quickly and asks an extra question.",
-            "Jisoo understands only part of it, so she feels pressure.",
-            "She thinks about asking for repetition, using simple words, or staying silent.",
-            "The teacher is walking closer, and Jisoo has to respond soon.",
-        ],
-        "passage_ko_sentences": [
-            "Jisoo는 영어 수업에서 짝 말하기 활동을 합니다.",
-            "주제는 알고 있지만 실수할까 봐 걱정합니다.",
-            "짝 친구는 빠르게 말하기 시작하고 추가 질문도 합니다.",
-            "Jisoo는 그 말의 일부만 이해해서 압박을 느낍니다.",
-            "다시 말해 달라고 하거나 쉬운 표현을 쓰거나 조용히 있을지를 생각합니다.",
-            "선생님이 가까이 오고 있어서 Jisoo는 곧 대답해야 합니다.",
-        ],
-    },
-    "B1": {
-        "story_title": "Daniel's Group Presentation",
-        "story_title_ko": "Daniel의 모둠 발표",
-        "character_focus": "Daniel",
-        "relationship_focus": "Daniel and his group",
-        "relationship_focus_ko": "Daniel과 모둠 친구들",
-        "passage_sentences": [
-            "Daniel is preparing a short group presentation in English class.",
-            "He practiced his part at home, but he still worries that his pronunciation is weak.",
-            "During practice time, one group member suggests adding a harder example.",
-            "Daniel thinks the new example sounds better, but he is not sure he can explain it clearly.",
-            "He notices that he speaks less whenever the task becomes difficult.",
-            "Now he must decide how to help the group without hiding behind the others.",
-        ],
-        "passage_ko_sentences": [
-            "Daniel은 영어 수업에서 짧은 모둠 발표를 준비하고 있습니다.",
-            "집에서 자신의 부분을 연습했지만 발음이 약하다고 여전히 걱정합니다.",
-            "연습 시간에 한 모둠 친구가 더 어려운 예시를 넣자고 제안합니다.",
-            "Daniel은 그 예시가 더 좋다고 생각하지만 자신이 그것을 분명하게 설명할 수 있을지는 확신하지 못합니다.",
-            "과제가 어려워질수록 자신이 말을 덜 하게 된다는 점도 알아차립니다.",
-            "이제 그는 다른 친구들 뒤에 숨지 않으면서 모둠에 어떻게 기여할지 결정해야 합니다.",
-        ],
-    },
-    "B2": {
-        "story_title": "Hana's Debate Decision",
-        "story_title_ko": "Hana의 토론 선택",
-        "character_focus": "Hana",
-        "relationship_focus": "Hana and the debate team",
-        "relationship_focus_ko": "Hana와 토론 팀",
-        "passage_sentences": [
-            "Hana joins an English debate activity about school rules.",
-            "She understands the topic well and has several ideas, but she hesitates because confident speakers often talk first.",
-            "When the discussion begins, another student presents one of Hana's ideas before she can say it.",
-            "Hana feels frustrated and starts to doubt whether her English is strong enough to add something new.",
-            "At the same time, she knows that careful listening and quick note-taking could help her re-enter the discussion.",
-            "She has only a short moment to decide whether to speak up, ask a question, or stay in the background.",
-        ],
-        "passage_ko_sentences": [
-            "Hana는 학교 규칙에 대한 영어 토론 활동에 참여합니다.",
-            "주제를 잘 이해하고 여러 생각도 있지만 자신감 있는 학생들이 먼저 말하는 경우가 많아서 망설입니다.",
-            "토론이 시작되자 다른 학생이 Hana가 말하려던 생각 중 하나를 먼저 발표합니다.",
-            "Hana는 답답함을 느끼고 자신의 영어가 새로운 의견을 더할 만큼 충분한지 의심하기 시작합니다.",
-            "동시에 신중하게 듣고 빠르게 메모하는 것이 다시 대화에 들어가는 데 도움이 될 수 있다는 점도 알고 있습니다.",
-            "그녀는 말할지, 질문할지, 아니면 뒤로 물러날지 아주 짧은 시간 안에 결정해야 합니다.",
-        ],
-    },
-    "C1": {
-        "story_title": "Yuna's Seminar Response",
-        "story_title_ko": "Yuna의 세미나 응답",
-        "character_focus": "Yuna",
-        "relationship_focus": "Yuna and the seminar group",
-        "relationship_focus_ko": "Yuna와 세미나 그룹",
-        "passage_sentences": [
-            "Yuna is taking part in an advanced English seminar that values spontaneous discussion.",
-            "She has read the article carefully and formed a nuanced opinion, yet she worries that her response may sound less sophisticated than the comments made by fluent classmates.",
-            "When the instructor asks for immediate reactions, the room becomes briefly silent before several students begin speaking at once.",
-            "Yuna recognizes that waiting too long may make her seem passive, but speaking too quickly could weaken the quality of her point.",
-            "She starts weighing whether to summarize the article, challenge one idea, or build on a classmate's comment with a precise example.",
-            "Her next choice will shape both how others see her and how confidently she joins future discussions.",
-        ],
-        "passage_ko_sentences": [
-            "Yuna는 즉흥적인 토론을 중요하게 여기는 고급 영어 세미나에 참여하고 있습니다.",
-            "글을 꼼꼼하게 읽고 섬세한 의견도 만들었지만, 유창한 친구들의 발언보다 자신의 응답이 덜 세련되게 들릴까 걱정합니다.",
-            "교수가 즉각적인 반응을 요청하자 교실은 잠시 조용해졌다가 여러 학생이 동시에 말하기 시작합니다.",
-            "Yuna는 너무 오래 기다리면 수동적으로 보일 수 있지만 너무 빨리 말하면 자신의 의견의 질이 약해질 수 있다는 점을 알고 있습니다.",
-            "그녀는 글을 요약할지, 한 가지 생각에 이의를 제기할지, 아니면 정확한 예시로 친구의 의견을 확장할지를 저울질하기 시작합니다.",
-            "다음 선택은 다른 사람들이 자신을 어떻게 보는지와 앞으로 토론에 얼마나 자신감 있게 참여하는지를 모두 좌우하게 됩니다.",
-        ],
-    },
-}
-
-FALLBACK_PASSAGE_VARIANTS_BY_LEVEL = {
-    "A1": [
-        FALLBACK_PASSAGES_BY_LEVEL["A1"],
-        {
-            "story_title": "Leo's Lost Word",
-            "story_title_ko": "Leo의 생각나지 않는 단어",
-            "character_focus": "Leo",
-            "relationship_focus": "Leo and his teacher",
-            "relationship_focus_ko": "Leo와 선생님",
-            "passage_sentences": [
-                "Leo is in English class.",
-                "The teacher asks him a simple question about food.",
-                "Leo knows the answer in Korean, but he forgets one English word.",
-                "He looks at the board and then at his teacher.",
-                "His classmates wait quietly for him to speak.",
-                "Leo must decide if he will try, ask for help, or stay silent.",
-            ],
-            "passage_ko_sentences": [
-                "Leo는 영어 수업에 있습니다.",
-                "선생님은 음식에 대한 쉬운 질문을 합니다.",
-                "Leo는 한국어로는 답을 알지만 영어 단어 하나가 생각나지 않습니다.",
-                "그는 칠판을 보고 다시 선생님을 봅니다.",
-                "친구들은 Leo가 말하기를 조용히 기다립니다.",
-                "Leo는 말해 볼지, 도움을 요청할지, 아니면 조용히 있을지 결정해야 합니다.",
-            ],
-        },
-        {
-            "story_title": "Sujin's Reading Turn",
-            "story_title_ko": "Sujin의 읽기 차례",
-            "character_focus": "Sujin",
-            "relationship_focus": "Sujin and her classmates",
-            "relationship_focus_ko": "Sujin과 반 친구들",
-            "passage_sentences": [
-                "Sujin opens her English book in class.",
-                "Today she must read one short paragraph aloud.",
-                "She can understand the paragraph, but she feels shy about her pronunciation.",
-                "One classmate reads before her and sounds very confident.",
-                "Sujin takes a breath and holds the book tightly.",
-                "She must decide how to start when the teacher calls her name.",
-            ],
-            "passage_ko_sentences": [
-                "Sujin은 영어 수업에서 책을 펼칩니다.",
-                "오늘 그녀는 짧은 한 문단을 소리 내어 읽어야 합니다.",
-                "문단은 이해하지만 발음 때문에 부끄럽습니다.",
-                "앞에서 읽은 한 친구는 매우 자신감 있게 읽었습니다.",
-                "Sujin은 숨을 들이쉬고 책을 꼭 잡습니다.",
-                "선생님이 이름을 부를 때 어떻게 시작할지 결정해야 합니다.",
-            ],
-        },
-    ],
-    "A2": [
-        FALLBACK_PASSAGES_BY_LEVEL["A2"],
-        {
-            "story_title": "Arin's Club Introduction",
-            "story_title_ko": "Arin의 동아리 소개",
-            "character_focus": "Arin",
-            "relationship_focus": "Arin and the new students",
-            "relationship_focus_ko": "Arin과 새 학생들",
-            "passage_sentences": [
-                "Arin joins an English club after school.",
-                "The leader asks everyone to introduce themselves in English.",
-                "Arin prepared two easy sentences, but the room feels more formal than expected.",
-                "Two new students speak first and ask friendly follow-up questions.",
-                "Arin wonders if she should use her short script, say more, or ask someone to repeat a question.",
-                "Her turn is coming, and she has to make a choice soon.",
-            ],
-            "passage_ko_sentences": [
-                "Arin은 방과 후 영어 동아리에 참여합니다.",
-                "리더는 모두에게 영어로 자기소개를 하라고 합니다.",
-                "Arin은 쉬운 문장 두 개를 준비했지만 방 분위기가 생각보다 더 공식적입니다.",
-                "새 학생 두 명이 먼저 말하고 친근한 추가 질문도 합니다.",
-                "Arin은 짧게 준비한 말만 할지, 더 말할지, 아니면 질문을 다시 말해 달라고 할지 고민합니다.",
-                "곧 자신의 차례가 오기 때문에 빨리 선택해야 합니다.",
-            ],
-        },
-        {
-            "story_title": "Minho's Listening Task",
-            "story_title_ko": "Minho의 듣기 활동",
-            "character_focus": "Minho",
-            "relationship_focus": "Minho and his partner",
-            "relationship_focus_ko": "Minho와 짝 친구",
-            "passage_sentences": [
-                "Minho is doing a listening and speaking task in English class.",
-                "He hears most of the audio, but he misses one important detail.",
-                "His partner asks him to explain the answer right away.",
-                "Minho feels nervous because he does not want to slow the activity down.",
-                "He thinks about guessing, asking to hear the key detail again, or giving a very short answer.",
-                "The teacher is checking pairs and will come to them next.",
-            ],
-            "passage_ko_sentences": [
-                "Minho는 영어 수업에서 듣기와 말하기 활동을 하고 있습니다.",
-                "대부분의 오디오는 들었지만 중요한 정보 하나를 놓쳤습니다.",
-                "짝 친구는 바로 답을 설명해 보라고 합니다.",
-                "Minho는 활동 흐름을 늦추고 싶지 않아서 긴장합니다.",
-                "그는 추측할지, 중요한 부분을 다시 들려 달라고 할지, 아니면 아주 짧게 답할지 고민합니다.",
-                "선생님은 짝 활동을 확인하고 있고 곧 이쪽으로 올 예정입니다.",
-            ],
-        },
-    ],
-    "B1": [
-        FALLBACK_PASSAGES_BY_LEVEL["B1"],
-        {
-            "story_title": "Sora's Poster Session",
-            "story_title_ko": "Sora의 포스터 발표",
-            "character_focus": "Sora",
-            "relationship_focus": "Sora and the visiting students",
-            "relationship_focus_ko": "Sora와 방문 학생들",
-            "passage_sentences": [
-                "Sora is standing next to her English project poster.",
-                "She knows the main points well, but she did not expect so many visitors to ask questions.",
-                "One student asks her to compare two ideas that she only practiced briefly.",
-                "Sora understands the question, yet she needs a moment to organize her explanation.",
-                "She notices that when she feels pressure, she starts using shorter and less precise English.",
-                "Now she must decide how to keep the conversation going without losing confidence.",
-            ],
-            "passage_ko_sentences": [
-                "Sora는 영어 프로젝트 포스터 옆에 서 있습니다.",
-                "핵심 내용은 잘 알지만 이렇게 많은 방문 학생들이 질문할 줄은 몰랐습니다.",
-                "한 학생이 잠깐만 연습했던 두 아이디어를 비교해 달라고 요청합니다.",
-                "Sora는 질문은 이해했지만 설명을 정리할 시간이 조금 필요합니다.",
-                "압박을 느끼면 더 짧고 덜 정확한 영어를 쓰게 된다는 점도 알아차립니다.",
-                "이제 그녀는 자신감을 잃지 않으면서 대화를 이어 가는 방법을 결정해야 합니다.",
-            ],
-        },
-        {
-            "story_title": "Jun's Interview Practice",
-            "story_title_ko": "Jun의 인터뷰 연습",
-            "character_focus": "Jun",
-            "relationship_focus": "Jun and his teacher",
-            "relationship_focus_ko": "Jun과 선생님",
-            "passage_sentences": [
-                "Jun is practicing an English interview with his teacher.",
-                "He prepared several answers, but the teacher asks a new follow-up question about his future goals.",
-                "Jun has ideas, yet he cannot quickly choose the best words.",
-                "He worries that a long pause will make him look unprepared.",
-                "At the same time, he knows that speaking too fast may cause more mistakes.",
-                "Jun has to decide how to answer while staying calm and clear.",
-            ],
-            "passage_ko_sentences": [
-                "Jun은 선생님과 영어 인터뷰를 연습하고 있습니다.",
-                "여러 답을 준비했지만 선생님은 미래 목표에 대한 새로운 추가 질문을 합니다.",
-                "Jun에게는 생각이 있지만 가장 적절한 말을 빨리 고르지 못합니다.",
-                "오래 멈추면 준비가 안 된 것처럼 보일까 걱정합니다.",
-                "동시에 너무 빨리 말하면 실수가 더 많아질 수 있다는 것도 알고 있습니다.",
-                "Jun은 침착하고 분명하게 답하는 방법을 결정해야 합니다.",
-            ],
-        },
-    ],
-    "B2": [
-        FALLBACK_PASSAGES_BY_LEVEL["B2"],
-        {
-            "story_title": "Eun's Panel Discussion",
-            "story_title_ko": "Eun의 패널 토론",
-            "character_focus": "Eun",
-            "relationship_focus": "Eun and the discussion panel",
-            "relationship_focus_ko": "Eun과 토론 패널",
-            "passage_sentences": [
-                "Eun is taking part in an English panel discussion about online learning.",
-                "She has a clear opinion, but another panelist speaks strongly and changes the direction of the talk.",
-                "Eun realizes that her planned example may no longer fit the new focus.",
-                "She feels pressure because the audience seems interested in quick and confident responses.",
-                "At the same time, she knows that a thoughtful question or a flexible example could still help her re-enter the discussion.",
-                "She now has to choose how to respond without sounding weak or repetitive.",
-            ],
-            "passage_ko_sentences": [
-                "Eun은 온라인 학습에 대한 영어 패널 토론에 참여하고 있습니다.",
-                "분명한 의견이 있었지만 다른 패널 참가자가 강하게 말하면서 토론 방향이 바뀝니다.",
-                "Eun은 자신이 준비한 예시가 더 이상 새로운 흐름에 맞지 않을 수 있음을 깨닫습니다.",
-                "청중이 빠르고 자신감 있는 답변을 기대하는 것처럼 보여 압박을 느낍니다.",
-                "동시에 사려 깊은 질문이나 유연한 예시가 다시 대화에 들어가는 데 도움이 될 수 있다는 점도 알고 있습니다.",
-                "이제 그녀는 약해 보이거나 반복적으로 들리지 않으면서 어떻게 대응할지 선택해야 합니다.",
-            ],
-        },
-        {
-            "story_title": "Taewoo's Research Briefing",
-            "story_title_ko": "Taewoo의 연구 브리핑",
-            "character_focus": "Taewoo",
-            "relationship_focus": "Taewoo and his group",
-            "relationship_focus_ko": "Taewoo와 팀원들",
-            "passage_sentences": [
-                "Taewoo is giving a short English briefing to his research group.",
-                "He understands the data, but he is less confident when he has to explain the limits of the results.",
-                "One teammate asks whether the group should trust the conclusion yet.",
-                "Taewoo thinks the answer is complex, and he wants to sound both honest and competent.",
-                "He considers summarizing the key point first, admitting the weakness, or inviting another member to add detail.",
-                "His next move will influence both the discussion and the group's view of his role.",
-            ],
-            "passage_ko_sentences": [
-                "Taewoo는 연구팀에 짧은 영어 브리핑을 하고 있습니다.",
-                "자료는 이해하지만 결과의 한계를 설명해야 할 때는 자신감이 덜합니다.",
-                "한 팀원이 아직 결론을 믿어도 되는지 묻습니다.",
-                "Taewoo는 답이 복잡하다고 생각하고, 솔직하면서도 유능하게 들리고 싶어 합니다.",
-                "그는 핵심을 먼저 요약할지, 약점을 인정할지, 아니면 다른 팀원에게 설명을 덧붙여 달라고 할지 고민합니다.",
-                "다음 행동은 토론과 팀원들이 그의 역할을 보는 방식 모두에 영향을 줄 것입니다.",
-            ],
-        },
-    ],
-    "C1": [
-        FALLBACK_PASSAGES_BY_LEVEL["C1"],
-        {
-            "story_title": "Hyejin's Policy Roundtable",
-            "story_title_ko": "Hyejin의 정책 라운드테이블",
-            "character_focus": "Hyejin",
-            "relationship_focus": "Hyejin and the roundtable group",
-            "relationship_focus_ko": "Hyejin과 라운드테이블 그룹",
-            "passage_sentences": [
-                "Hyejin is participating in an advanced English roundtable on public policy.",
-                "She has a strong argument, but several classmates are already using highly polished academic language.",
-                "When one speaker reframes the issue, Hyejin realizes her prepared comment may sound too narrow if she gives it unchanged.",
-                "She wants to respond quickly enough to stay relevant, yet she also wants her point to sound nuanced and well supported.",
-                "She begins weighing whether to redefine her claim, connect it to another speaker's point, or ask a strategic question before speaking.",
-                "Her decision will shape both the substance of the discussion and her own confidence in future academic talk.",
-            ],
-            "passage_ko_sentences": [
-                "Hyejin은 공공정책에 대한 고급 영어 라운드테이블에 참여하고 있습니다.",
-                "강한 주장은 있지만 이미 여러 학생이 매우 세련된 학문적 언어를 사용하고 있습니다.",
-                "한 발표자가 쟁점을 다시 규정하자, Hyejin은 준비한 말이 그대로면 너무 좁게 들릴 수 있음을 깨닫습니다.",
-                "관련성을 유지할 만큼 빠르게 반응하고 싶지만, 동시에 자신의 의견이 섬세하고 충분히 뒷받침되게 들리길 원합니다.",
-                "그녀는 자신의 주장을 다시 정의할지, 다른 사람의 의견과 연결할지, 아니면 말하기 전에 전략적인 질문을 할지 고민하기 시작합니다.",
-                "이 결정은 토론의 내용뿐 아니라 앞으로의 학문적 말하기에 대한 자신감에도 영향을 줄 것입니다.",
-            ],
-        },
-    ],
-    "C2": [
-        {
-            "story_title": "Minseo's Colloquium Challenge",
-            "story_title_ko": "Minseo의 콜로퀴엄 도전",
-            "character_focus": "Minseo",
-            "relationship_focus": "Minseo and the colloquium audience",
-            "relationship_focus_ko": "Minseo와 콜로퀴엄 청중",
-            "passage_sentences": [
-                "Minseo is presenting at an English-language colloquium where the audience expects spontaneous and well-qualified answers.",
-                "Her main argument is persuasive, yet a senior participant raises a counterpoint that challenges one of her assumptions rather than her evidence.",
-                "Minseo immediately sees that a simple defense would sound superficial, but a fully nuanced response may take longer than the setting comfortably allows.",
-                "She also realizes that the audience is watching not only what she says, but how flexibly she can rethink her position under pressure.",
-                "In a few seconds, she begins deciding whether to concede part of the critique, reframe the assumption, or redirect the discussion toward a stronger analytical distinction.",
-                "Whatever she says next will influence both the credibility of her talk and her willingness to enter similarly demanding discussions again.",
-            ],
-            "passage_ko_sentences": [
-                "Minseo는 즉흥적이면서도 정교한 답변이 기대되는 영어 콜로퀴엄에서 발표하고 있습니다.",
-                "주장은 설득력 있지만 한 선임 참가자가 증거가 아니라 그녀의 가정 중 하나를 문제 삼는 반론을 제기합니다.",
-                "Minseo는 단순히 방어하면 피상적으로 들릴 것이고, 충분히 섬세한 답을 하자니 지금 상황에 비해 너무 길어질 수 있음을 즉시 알아차립니다.",
-                "또한 청중은 그녀가 무엇을 말하는지만이 아니라 압박 속에서 자신의 입장을 얼마나 유연하게 재구성하는지도 보고 있다는 점을 깨닫습니다.",
-                "몇 초 사이에 그녀는 비판의 일부를 인정할지, 가정을 다시 규정할지, 아니면 더 강한 분석적 구분으로 논의를 돌릴지 결정하기 시작합니다.",
-                "다음 말은 발표의 신뢰도뿐 아니라 앞으로 이런 높은 수준의 토론에 다시 참여하려는 의지에도 영향을 줄 것입니다.",
-            ],
-        },
-        {
-            "story_title": "Jaeon's Seminar Intervention",
-            "story_title_ko": "Jaeon의 세미나 개입",
-            "character_focus": "Jaeon",
-            "relationship_focus": "Jaeon and the seminar room",
-            "relationship_focus_ko": "Jaeon과 세미나 참가자들",
-            "passage_sentences": [
-                "Jaeon is in a C2-level seminar where participants are expected to challenge ideas without weakening the collaborative tone of the discussion.",
-                "He disagrees with the emerging consensus, but he also sees that several classmates are building their comments on one another in a highly sophisticated way.",
-                "If he speaks too bluntly, he may sound dismissive; if he softens his position too much, his intervention may disappear into the discussion without real impact.",
-                "He therefore starts balancing precision, politeness, timing, and strategic framing all at once.",
-                "He considers whether to expose a hidden assumption, introduce a counterexample, or reformulate the group's conclusion in a way that reveals its limitation more subtly.",
-                "The choice he makes will affect not only this exchange, but also how confidently he contributes in future high-stakes academic conversations.",
-            ],
-            "passage_ko_sentences": [
-                "Jaeon은 협력적인 분위기를 해치지 않으면서도 적극적으로 반론을 제기해야 하는 C2 수준의 세미나에 있습니다.",
-                "그는 형성되고 있는 합의에 동의하지 않지만, 동시에 여러 학생이 매우 정교하게 서로의 발언을 확장하고 있다는 점도 봅니다.",
-                "너무 직설적으로 말하면 무시하는 것처럼 들릴 수 있고, 입장을 너무 약하게 만들면 그의 개입은 실제 영향 없이 토론 속에 묻혀 버릴 수 있습니다.",
-                "그래서 그는 정밀성, 공손함, 타이밍, 전략적 framing을 동시에 조절하기 시작합니다.",
-                "그는 숨겨진 가정을 드러낼지, 반례를 제시할지, 아니면 그룹의 결론을 더 미묘하게 재구성해 한계를 드러낼지를 고민합니다.",
-                "그가 내리는 선택은 이번 대화뿐 아니라 앞으로의 높은 수준 학문적 대화에 얼마나 자신감 있게 참여하는지도 좌우할 것입니다.",
-            ],
-        },
-    ],
-}
-
-FALLBACK_DYNAMIC_CHARACTER_NAMES = [
-    "Minji",
-    "Jisoo",
-    "Yuna",
-    "Jiho",
-    "Minho",
-    "Sora",
-    "Eunseo",
-    "Arin",
-    "Taewoo",
-    "Hyejin",
-    "Jun",
-    "Hana",
-]
-
-FALLBACK_BACKGROUND_CONFIGS = {
-    "Classroom": {
-        "topic_en": "Class Discussion",
-        "topic_ko": "수업 토의",
-        "setting_en": "in English class",
-        "setting_ko": "영어 수업에서",
-        "context_en": "after class",
-        "context_ko": "수업이 끝난 뒤",
-        "task_en": "share one idea about today's reading",
-        "task_ko": "오늘 읽은 글에 대한 생각 한 가지를 말하다",
-        "focus_en": "the teacher and the class",
-        "focus_ko": "선생님과 반 친구들",
-        "twist_en": "another student speaks first and changes the direction of the discussion",
-        "twist_ko": "다른 학생이 먼저 말하면서 토의의 흐름이 바뀐다",
-        "support_en": "the key words in the notebook",
-        "support_ko": "공책에 적은 핵심 단어",
-        "choice_en": "speaking with simple words, asking for a moment, or staying quiet",
-        "choice_ko": "쉬운 말로 먼저 말하기, 잠깐 생각할 시간을 요청하기, 또는 조용히 있기",
-        "stakes_en": "The next answer could shape the rest of the class activity",
-        "stakes_ko": "다음 대답이 이어지는 수업 활동의 분위기를 바꿀 수 있다",
-    },
-    "Campus life": {
-        "topic_en": "Campus Help Booth",
-        "topic_ko": "캠퍼스 안내 부스",
-        "setting_en": "at a campus help booth",
-        "setting_ko": "캠퍼스 안내 부스에서",
-        "context_en": "during a campus event",
-        "context_ko": "캠퍼스 행사 중에",
-        "task_en": "explain a school event and give directions in English",
-        "task_ko": "학교 행사와 길 안내를 영어로 설명하다",
-        "focus_en": "two exchange students",
-        "focus_ko": "두 명의 교환학생",
-        "twist_en": "one student asks an extra question that was not on the practice sheet",
-        "twist_ko": "한 학생이 연습지에 없던 추가 질문을 한다",
-        "support_en": "a campus map and a short phrase card",
-        "support_ko": "캠퍼스 지도와 짧은 표현 카드",
-        "choice_en": "answering slowly, asking for repetition, or pointing to the map first",
-        "choice_ko": "천천히 답하기, 다시 말해 달라고 하기, 또는 먼저 지도를 가리키기",
-        "stakes_en": "The students need help right away, so the reply matters",
-        "stakes_ko": "학생들은 바로 도움이 필요해서 대답이 중요하다",
-    },
-    "Daily life": {
-        "topic_en": "Voice Message Plan",
-        "topic_ko": "음성 메시지 계획",
-        "setting_en": "at home after school",
-        "setting_ko": "방과 후 집에서",
-        "context_en": "in the evening",
-        "context_ko": "저녁에",
-        "task_en": "send an English voice message about a weekend plan to a family friend abroad",
-        "task_ko": "해외에 있는 가족 친구에게 주말 계획을 영어 음성 메시지로 보내다",
-        "focus_en": "a family friend abroad",
-        "focus_ko": "해외에 있는 가족 친구",
-        "twist_en": "the first recording sounds awkward and misses an important detail",
-        "twist_ko": "첫 녹음이 어색하고 중요한 내용을 하나 빠뜨린다",
-        "support_en": "a short phrase list on the phone",
-        "support_ko": "휴대폰에 저장한 짧은 표현 목록",
-        "choice_en": "recording again, using simpler words, or stopping for now",
-        "choice_ko": "다시 녹음하기, 더 쉬운 말을 쓰기, 또는 잠시 멈추기",
-        "stakes_en": "The message should sound friendly and clear",
-        "stakes_ko": "메시지는 친근하고 분명하게 들려야 한다",
-    },
-    "Part-time job": {
-        "topic_en": "Cafe Order",
-        "topic_ko": "카페 주문",
-        "setting_en": "at a part-time cafe job",
-        "setting_ko": "아르바이트 카페에서",
-        "context_en": "during a busy shift",
-        "context_ko": "손님이 많은 근무 시간에",
-        "task_en": "take a visitor's order in English",
-        "task_ko": "방문 손님의 주문을 영어로 받다",
-        "focus_en": "a customer and the shift manager",
-        "focus_ko": "손님과 매니저",
-        "twist_en": "the customer changes the order and speaks faster than expected",
-        "twist_ko": "손님이 주문을 바꾸고 예상보다 더 빠르게 말한다",
-        "support_en": "the menu board and a practiced opening line",
-        "support_ko": "메뉴판과 미리 연습한 첫 문장",
-        "choice_en": "confirming the order step by step, asking for repetition, or calling the manager immediately",
-        "choice_ko": "주문을 하나씩 다시 확인하기, 다시 말해 달라고 하기, 또는 바로 매니저를 부르기",
-        "stakes_en": "The line is getting longer, so the moment feels urgent",
-        "stakes_ko": "줄이 점점 길어져서 이 순간이 더 급하게 느껴진다",
-    },
-    "Travel": {
-        "topic_en": "Hostel Check-in",
-        "topic_ko": "호스텔 체크인",
-        "setting_en": "at a hostel desk during a school trip",
-        "setting_ko": "수학여행 중 호스텔 안내 데스크에서",
-        "context_en": "during the trip",
-        "context_ko": "여행 중에",
-        "task_en": "ask for transport and breakfast information in English",
-        "task_ko": "교통편과 아침 식사 정보를 영어로 묻다",
-        "focus_en": "the hostel clerk",
-        "focus_ko": "호스텔 직원",
-        "twist_en": "the clerk gives two quick directions at once",
-        "twist_ko": "직원이 두 가지 안내를 한 번에 빠르게 말한다",
-        "support_en": "a travel note saved on the phone",
-        "support_ko": "휴대폰에 저장한 여행 메모",
-        "choice_en": "asking one question at a time, repeating key words, or pretending to understand",
-        "choice_ko": "질문을 하나씩 하기, 핵심 단어를 다시 말해 보기, 또는 이해한 척하기",
-        "stakes_en": "The group needs the information soon",
-        "stakes_ko": "일행은 그 정보를 곧 알아야 한다",
-    },
-    "Online communication": {
-        "topic_en": "Study Call",
-        "topic_ko": "학습 화상 통화",
-        "setting_en": "in an evening video call",
-        "setting_ko": "저녁 화상 통화에서",
-        "context_en": "during online study time",
-        "context_ko": "온라인 학습 시간에",
-        "task_en": "discuss a short article in English with an online study partner",
-        "task_ko": "온라인 학습 파트너와 짧은 글을 영어로 이야기하다",
-        "focus_en": "an online study partner",
-        "focus_ko": "온라인 학습 파트너",
-        "twist_en": "the connection freezes and part of the comment is missed",
-        "twist_ko": "연결이 끊기면서 말의 일부를 놓친다",
-        "support_en": "the chat box and a few written notes",
-        "support_ko": "채팅창과 짧게 적어 둔 메모",
-        "choice_en": "asking for clarification, typing a key point, or smiling and moving on",
-        "choice_ko": "다시 설명해 달라고 하기, 핵심을 채팅으로 쓰기, 또는 웃고 넘어가기",
-        "stakes_en": "The conversation keeps moving, so timing matters",
-        "stakes_ko": "대화가 계속 이어져서 타이밍이 중요하다",
-    },
-    "Friendship": {
-        "topic_en": "Practice with a Friend",
-        "topic_ko": "친구와의 영어 연습",
-        "setting_en": "in a chat with a close friend",
-        "setting_ko": "친한 친구와의 채팅에서",
-        "context_en": "after dinner",
-        "context_ko": "저녁 식사 후에",
-        "task_en": "reply in English because a close friend wants to practice together",
-        "task_ko": "친한 친구와 함께 연습하려고 영어로 답하다",
-        "focus_en": "a close friend",
-        "focus_ko": "친한 친구",
-        "twist_en": "the friend asks a more personal follow-up question than expected",
-        "twist_ko": "친구가 생각보다 더 개인적인 추가 질문을 한다",
-        "support_en": "saved expressions and a short voice memo",
-        "support_ko": "저장해 둔 표현과 짧은 음성 메모",
-        "choice_en": "answering honestly with simple English, asking for time, or changing the topic",
-        "choice_ko": "쉬운 영어로 솔직하게 답하기, 시간을 좀 달라고 하기, 또는 화제를 바꾸기",
-        "stakes_en": "The friend is waiting for a real answer",
-        "stakes_ko": "친구는 진짜 답을 기다리고 있다",
-    },
-    "Club activity": {
-        "topic_en": "Club Plan",
-        "topic_ko": "동아리 계획",
-        "setting_en": "at an after-school club meeting",
-        "setting_ko": "방과 후 동아리 모임에서",
-        "context_en": "before the meeting ends",
-        "context_ko": "모임이 끝나기 전에",
-        "task_en": "explain an activity plan in English to mixed-level members",
-        "task_ko": "수준이 다른 동아리원들에게 활동 계획을 영어로 설명하다",
-        "focus_en": "the club members",
-        "focus_ko": "동아리원들",
-        "twist_en": "someone suggests a new idea that changes the plan",
-        "twist_ko": "누군가 새로운 아이디어를 내서 계획이 바뀐다",
-        "support_en": "a printed outline and a few key words",
-        "support_ko": "출력한 개요와 몇 개의 핵심 단어",
-        "choice_en": "keeping the original plan, adjusting the idea, or asking another member to help explain",
-        "choice_ko": "원래 계획을 유지하기, 아이디어를 조정하기, 또는 다른 구성원에게 설명을 도와달라고 하기",
-        "stakes_en": "The group needs a decision today",
-        "stakes_ko": "모둠은 오늘 결정을 내려야 한다",
-    },
-    "Test preparation": {
-        "topic_en": "Speaking Practice",
-        "topic_ko": "말하기 연습",
-        "setting_en": "during speaking-test practice",
-        "setting_ko": "말하기 시험 연습 중에",
-        "context_en": "right before the timer ends",
-        "context_ko": "타이머가 끝나기 직전에",
-        "task_en": "answer a sample speaking question in English",
-        "task_ko": "예시 말하기 질문에 영어로 답하다",
-        "focus_en": "a study partner",
-        "focus_ko": "스터디 파트너",
-        "twist_en": "the second question is harder and needs a personal example",
-        "twist_ko": "두 번째 질문이 더 어렵고 개인적인 예시가 필요하다",
-        "support_en": "a timer and a short checklist",
-        "support_ko": "타이머와 짧은 체크리스트",
-        "choice_en": "giving a short example, asking for a second to think, or stopping early",
-        "choice_ko": "짧은 예시를 말하기, 잠깐 생각할 시간을 요청하기, 또는 일찍 멈추기",
-        "stakes_en": "The practice time is almost over",
-        "stakes_ko": "연습 시간이 거의 끝나 간다",
-    },
-    "Self-study": {
-        "topic_en": "Recording Practice",
-        "topic_ko": "녹음 연습",
-        "setting_en": "alone at a desk after dinner",
-        "setting_ko": "저녁 식사 후 책상 앞에서 혼자",
-        "context_en": "late in the evening",
-        "context_ko": "늦은 저녁에",
-        "task_en": "record an English answer and upload it for feedback",
-        "task_ko": "영어 답변을 녹음해 피드백용으로 올리다",
-        "focus_en": "an online tutor",
-        "focus_ko": "온라인 튜터",
-        "twist_en": "the recorded answer sounds less clear than expected",
-        "twist_ko": "녹음한 답이 생각보다 덜 분명하게 들린다",
-        "support_en": "last week's correction sheet",
-        "support_ko": "지난주 교정지",
-        "choice_en": "recording again, fixing one problem at a time, or skipping the upload",
-        "choice_ko": "다시 녹음하기, 문제를 하나씩 고치기, 또는 업로드를 건너뛰기",
-        "stakes_en": "The upload deadline is tonight",
-        "stakes_ko": "업로드 마감은 오늘 밤이다",
-    },
-}
-
-FALLBACK_GENRE_TITLES = {
-    "Narrative story": {
-        "suffix_en": "Story",
-        "suffix_ko": "이야기",
-    },
-    "Dialogue": {
-        "suffix_en": "Dialogue",
-        "suffix_ko": "대화",
-    },
-    "Message/chat": {
-        "suffix_en": "Chat",
-        "suffix_ko": "채팅",
-    },
-    "Email": {
-        "suffix_en": "Email Draft",
-        "suffix_ko": "이메일 초안",
-    },
-    "Reflection journal": {
-        "suffix_en": "Journal Entry",
-        "suffix_ko": "성찰 일지",
-    },
-    "Problem situation": {
-        "suffix_en": "Problem",
-        "suffix_ko": "문제 상황",
-    },
-    "Short anecdote": {
-        "suffix_en": "Anecdote",
-        "suffix_ko": "짧은 일화",
-    },
-}
-
-
-# -----------------------------
-# Output and storage helpers
-# -----------------------------
-def ensure_output_directories():
-    os.makedirs(RESPONSES_DIR, exist_ok=True)
-    os.makedirs(EVALUATIONS_DIR, exist_ok=True)
-    os.makedirs(BY_STUDENT_RESPONSES_DIR, exist_ok=True)
-    os.makedirs(BY_STUDENT_EVALUATIONS_DIR, exist_ok=True)
-
-
-def extract_spreadsheet_id(value: str) -> str:
-    if not value:
-        return ""
-
-    value = value.strip()
-    match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", value)
-    if match:
-        return match.group(1)
-
-    return value
-
-
-def normalize_private_key(private_key: str) -> str:
-    if not private_key:
-        return ""
-
-    normalized = private_key.strip()
-    if normalized.startswith('"') and normalized.endswith('"'):
-        normalized = normalized[1:-1]
-
-    normalized = normalized.replace("\\n", "\n")
-    normalized = normalized.replace("\r\n", "\n")
-    return normalized
-
-
-def normalize_service_account_info(service_account_info: dict) -> dict:
-    normalized = dict(service_account_info)
-    if "private_key" in normalized:
-        normalized["private_key"] = normalize_private_key(str(normalized["private_key"]))
-    return normalized
-
-
-def get_google_sheets_config() -> dict:
-    google_service_account = None
-    sheet_settings = None
-
-    if "google_service_account" in st.secrets and "google_sheets" in st.secrets:
-        google_service_account = dict(st.secrets["google_service_account"])
-        sheet_settings = dict(st.secrets["google_sheets"])
-    elif "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-        connection_settings = dict(st.secrets["connections"]["gsheets"])
-        google_service_account = {
-            key: connection_settings[key]
-            for key in [
-                "type",
-                "project_id",
-                "private_key_id",
-                "private_key",
-                "client_email",
-                "client_id",
-                "auth_uri",
-                "token_uri",
-                "auth_provider_x509_cert_url",
-                "client_x509_cert_url",
-                "universe_domain",
-            ]
-            if key in connection_settings
-        }
-        sheet_settings = connection_settings
-    else:
-        return {"enabled": False}
-
-    spreadsheet_id = extract_spreadsheet_id(sheet_settings.get("spreadsheet_id", ""))
-    if not spreadsheet_id:
-        spreadsheet_id = extract_spreadsheet_id(sheet_settings.get("spreadsheet_url", ""))
-
-    if not spreadsheet_id or not google_service_account:
-        return {"enabled": False}
-
-    return {
-        "enabled": True,
-        "service_account": normalize_service_account_info(google_service_account),
-        "spreadsheet_id": spreadsheet_id,
-        "responses_worksheet": sheet_settings.get("responses_worksheet", DEFAULT_RESPONSES_WORKSHEET),
-        "evaluations_worksheet": sheet_settings.get("evaluations_worksheet", DEFAULT_EVALUATIONS_WORKSHEET),
-    }
-
-
-def get_llm_config() -> dict:
-    api_key = ""
-    model = DEFAULT_LLM_MODEL
-
-    if "openai" in st.secrets:
-        openai_settings = dict(st.secrets["openai"])
-        api_key = str(openai_settings.get("api_key", "")).strip()
-        model = str(
-            openai_settings.get("question_model")
-            or openai_settings.get("model")
-            or model
-        ).strip()
-
-    if not api_key and "OPENAI_API_KEY" in st.secrets:
-        api_key = str(st.secrets["OPENAI_API_KEY"]).strip()
-
-    env_api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    env_model = os.getenv("OPENAI_QUESTION_MODEL", "").strip()
-
-    if env_api_key and not api_key:
-        api_key = env_api_key
-    if env_model:
-        model = env_model
-
-    return {
-        "enabled": bool(api_key),
-        "api_key": api_key,
-        "model": model or DEFAULT_LLM_MODEL,
-    }
-
-
-@st.cache_resource
-def get_gspread_client(service_account_info: dict):
-    return gspread.service_account_from_dict(service_account_info)
-
-
-@st.cache_resource
-def get_openai_client(api_key: str):
-    return OpenAI(api_key=api_key)
-
-
-def get_google_spreadsheet(config: dict):
-    client = get_gspread_client(config["service_account"])
-    return client.open_by_key(config["spreadsheet_id"])
-
-
-def ensure_worksheet(spreadsheet, worksheet_name: str, headers: list):
-    try:
-        worksheet = spreadsheet.worksheet(worksheet_name)
-    except gspread.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(
-            title=worksheet_name,
-            rows=max(1000, len(headers) + 10),
-            cols=max(26, len(headers) + 10),
-        )
-
-    existing_headers = worksheet.row_values(1)
-    merged_headers = list(existing_headers)
-
-    for header in headers:
-        if header not in merged_headers:
-            merged_headers.append(header)
-
-    if len(merged_headers) > worksheet.col_count:
-        worksheet.add_cols(len(merged_headers) - worksheet.col_count)
-
-    if not existing_headers:
-        worksheet.update("A1", [merged_headers])
-    elif merged_headers != existing_headers:
-        worksheet.update("A1", [merged_headers])
-
-    return worksheet, merged_headers
-
-
-def append_rows_to_google_sheet(spreadsheet, worksheet_name: str, rows: list):
-    if not rows:
-        return
-
-    headers = []
-    for row in rows:
-        for key in row.keys():
-            if key not in headers:
-                headers.append(key)
-
-    worksheet, merged_headers = ensure_worksheet(spreadsheet, worksheet_name, headers)
-    values = [[row.get(header, "") for header in merged_headers] for row in rows]
-    worksheet.append_rows(values, value_input_option="USER_ENTERED")
-
-
-def append_rows(file_path: str, rows: list):
-    ensure_output_directories()
-    df_new = pd.DataFrame(rows)
-
-    if os.path.exists(file_path):
-        df_old = pd.read_csv(file_path)
-        df_all = pd.concat([df_old, df_new], ignore_index=True)
-    else:
-        df_all = df_new
-
-    df_all.to_csv(file_path, index=False, encoding="utf-8-sig")
-
-
-def save_rows(rows: list, local_file_path: str, google_worksheet_name: str):
-    google_config = get_google_sheets_config()
-
-    if google_config["enabled"]:
-        spreadsheet = get_google_spreadsheet(google_config)
-        append_rows_to_google_sheet(spreadsheet, google_worksheet_name, rows)
-        return {
-            "backend": "google_sheets",
-            "spreadsheet_id": google_config["spreadsheet_id"],
-            "spreadsheet_url": f"https://docs.google.com/spreadsheets/d/{google_config['spreadsheet_id']}",
-            "worksheet_name": google_worksheet_name,
-        }
-
-    append_rows(local_file_path, rows)
-    return {
-        "backend": "local_csv",
-        "file_path": local_file_path,
-    }
-
-
-# -----------------------------
-# Questionnaire generation helpers
-# -----------------------------
-def get_question_slots() -> list:
-    return [
-        question
-        for section in QUESTION_SECTION_BLUEPRINTS
-        for question in section["questions"]
-    ]
-
-
-def get_all_questions(questionnaire: dict) -> list:
-    return [
-        question
-        for section in questionnaire["sections"]
-        for question in section["questions"]
-    ]
-
-
-def get_question_lookup(questionnaire: dict) -> dict:
-    return {question["id"]: question for question in get_all_questions(questionnaire)}
-
-
-def build_question_slot_instructions() -> str:
-    lines = []
-    for question in get_question_slots():
-        line = (
-            f"- {question['id']} | layer={question['layer']} | type={question['type']} | "
-            f"goal={question['question_goal']}"
-        )
-        if question.get("criteria_focus"):
-            line += f" | criteria={question['criteria_focus']}"
-        lines.append(line)
-    return "\n".join(lines)
-
-
-def extract_json_object(text: str) -> dict:
-    if not text:
-        raise ValueError("The model returned an empty response.")
-
-    code_block_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
-    if code_block_match:
-        text = code_block_match.group(1)
-
-    start_index = text.find("{")
-    end_index = text.rfind("}")
-
-    if start_index < 0 or end_index < 0 or end_index <= start_index:
-        raise ValueError("No JSON object was found in the model response.")
-
-    return json.loads(text[start_index : end_index + 1])
-
-
-def format_passage_markdown(title: str, sentences: list) -> str:
-    return "\n".join([f"**{title}**", "", *sentences])
-
-
-def build_participant_signature(student_name: str, student_number: str) -> str:
-    return f"{student_name.strip()}::{student_number.strip()}"
-
-
-def deterministic_pick(options: list, *parts: str):
-    if not options:
-        raise ValueError("Options must not be empty.")
-
-    hash_input = "|".join(str(part) for part in parts)
-    hash_value = hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
-    index = int(hash_value[:8], 16) % len(options)
-    return options[index]
-
-
-def get_fallback_style_band(cefr_level: str) -> str:
-    if cefr_level == "A1":
-        return "basic"
-    if cefr_level == "A2":
-        return "basic_plus"
-    if cefr_level in {"B1", "B2"}:
-        return "intermediate"
-    return "advanced"
-
-
-def build_dynamic_fallback_title(character_name: str, selected_background: str, selected_genre: str) -> tuple:
-    scene = FALLBACK_BACKGROUND_CONFIGS.get(selected_background, FALLBACK_BACKGROUND_CONFIGS["Daily life"])
-    genre_info = FALLBACK_GENRE_TITLES.get(selected_genre, FALLBACK_GENRE_TITLES["Narrative story"])
-    story_title = f"{character_name}'s {scene['topic_en']} {genre_info['suffix_en']}"
-    story_title_ko = f"{character_name}의 {scene['topic_ko']} {genre_info['suffix_ko']}"
-    return story_title, story_title_ko
-
-
-def build_dynamic_fallback_sentences(
-    cefr_level: str,
-    character_name: str,
-    selected_background: str,
-    selected_genre: str,
-) -> tuple:
-    scene = FALLBACK_BACKGROUND_CONFIGS.get(selected_background, FALLBACK_BACKGROUND_CONFIGS["Daily life"])
-    band = get_fallback_style_band(cefr_level)
-
-    if selected_genre == "Dialogue":
-        open_en = [
-            f"{character_name} is {scene['setting_en']}, and an English conversation begins.",
-            f"At first, {character_name} only needs to {scene['task_en']}.",
-        ]
-        open_ko = [
-            f"{character_name}는 {scene['setting_ko']} 있고, 영어 대화가 시작된다.",
-            f"처음에는 {character_name}가 {scene['task_ko']} 하면 된다.",
-        ]
-        close_en = "Before the dialogue ends, {name} must choose the next line carefully."
-        close_ko = "{name}는 대화가 끝나기 전에 다음 말을 신중하게 골라야 한다."
-    elif selected_genre == "Message/chat":
-        open_en = [
-            f"{character_name} opens an English chat {scene['context_en']}.",
-            f"In the chat, {character_name} wants to {scene['task_en']}.",
-        ]
-        open_ko = [
-            f"{character_name}는 {scene['context_ko']} 영어 채팅을 연다.",
-            f"그 채팅에서 {character_name}는 {scene['task_ko']} 싶다.",
-        ]
-        close_en = "Before sending the next message, {name} must choose what to say."
-        close_ko = "{name}는 다음 메시지를 보내기 전에 무엇을 쓸지 정해야 한다."
-    elif selected_genre == "Email":
-        open_en = [
-            f"{character_name} starts a short email in English {scene['context_en']}.",
-            f"In the email, {character_name} wants to {scene['task_en']}.",
-        ]
-        open_ko = [
-            f"{character_name}는 {scene['context_ko']} 짧은 영어 이메일을 쓰기 시작한다.",
-            f"그 이메일에서 {character_name}는 {scene['task_ko']} 싶다.",
-        ]
-        close_en = "Before sending the email, {name} must choose the best way to continue."
-        close_ko = "{name}는 이메일을 보내기 전에 가장 좋은 다음 표현을 골라야 한다."
-    elif selected_genre == "Reflection journal":
-        open_en = [
-            f"{character_name} writes in a reflection journal {scene['context_en']}.",
-            f"In the journal, {character_name} describes a moment when it was necessary to {scene['task_en']}.",
-        ]
-        open_ko = [
-            f"{character_name}는 {scene['context_ko']} 성찰 일지에 글을 쓴다.",
-            f"그 일지에서 {character_name}는 {scene['task_ko']} 해야 했던 순간을 적는다.",
-        ]
-        close_en = "At the end of the journal, {name} decides what to try next."
-        close_ko = "{name}는 일지의 마지막에서 다음에 무엇을 해 볼지 정한다."
-    elif selected_genre == "Problem situation":
-        open_en = [
-            f"{character_name} faces a difficult English moment {scene['setting_en']}.",
-            f"The problem begins when {character_name} needs to {scene['task_en']}.",
-        ]
-        open_ko = [
-            f"{character_name}는 {scene['setting_ko']} 어려운 영어 상황을 마주한다.",
-            f"문제는 {character_name}가 {scene['task_ko']} 해야 하면서 시작된다.",
-        ]
-        close_en = "To get through the problem, {name} must choose the next step now."
-        close_ko = "{name}는 이 문제를 넘기기 위해 지금 다음 행동을 정해야 한다."
-    elif selected_genre == "Short anecdote":
-        open_en = [
-            f"It starts as a small English moment {scene['setting_en']}.",
-            f"{character_name} simply wants to {scene['task_en']}.",
-        ]
-        open_ko = [
-            f"이 일은 {scene['setting_ko']} 작은 영어 순간으로 시작된다.",
-            f"{character_name}는 그저 {scene['task_ko']} 싶다.",
-        ]
-        close_en = "That short moment leaves {name} thinking about the next time."
-        close_ko = "그 짧은 순간은 {name}가 다음번을 생각하게 만든다."
-    else:
-        open_en = [
-            f"{character_name} is {scene['setting_en']}.",
-            f"Today {character_name} needs to {scene['task_en']}.",
-        ]
-        open_ko = [
-            f"{character_name}는 {scene['setting_ko']} 있다.",
-            f"오늘 {character_name}는 {scene['task_ko']} 해야 한다.",
-        ]
-        close_en = "{name} must decide what to do next in English."
-        close_ko = "{name}는 영어로 다음에 무엇을 할지 결정해야 한다."
-
-    if band == "basic":
-        middle_en = [
-            f"{character_name} prepared a little, but {scene['twist_en']}.",
-            f"{character_name} understands part of the moment, but not all of it.",
-            f"{character_name} feels nervous and still wants to do well.",
-            "The other person is waiting for an answer.",
-            f"{character_name} looks at {scene['support_en']}.",
-            f"{character_name} thinks about {scene['choice_en']}.",
-            f"{scene['stakes_en']}.",
-        ]
-        middle_ko = [
-            f"{character_name}는 조금 준비했지만 {scene['twist_ko']}.",
-            f"{character_name}는 상황의 일부는 이해하지만 전부는 아니다.",
-            f"{character_name}는 긴장하지만 그래도 잘하고 싶다.",
-            "상대는 답을 기다리고 있다.",
-            f"{character_name}는 {scene['support_ko']} 다시 본다.",
-            f"{character_name}는 {scene['choice_ko']} 생각한다.",
-            f"{scene['stakes_ko']}.",
-        ]
-    elif band == "basic_plus":
-        middle_en = [
-            f"{character_name} practiced before, but {scene['twist_en']}.",
-            f"Because of that change, {character_name} is not sure which words will work best.",
-            f"{character_name} wants to respond well, yet the pressure grows quickly.",
-            "Part of the problem is English itself, and part of it is the fear of making a mistake.",
-            f"{character_name} checks {scene['support_en']} and tries to stay calm.",
-            f"{character_name} starts weighing {scene['choice_en']}.",
-            f"{scene['stakes_en']}.",
-        ]
-        middle_ko = [
-            f"{character_name}는 미리 연습했지만 {scene['twist_ko']}.",
-            f"그 변화 때문에 {character_name}는 어떤 말이 가장 맞을지 확신하지 못한다.",
-            f"{character_name}는 잘 답하고 싶지만 압박이 빨리 커진다.",
-            "문제의 일부는 영어 자체이고, 다른 일부는 실수할까 봐 걱정하는 마음이다.",
-            f"{character_name}는 {scene['support_ko']} 확인하며 침착하려고 한다.",
-            f"{character_name}는 {scene['choice_ko']} 저울질하기 시작한다.",
-            f"{scene['stakes_ko']}.",
-        ]
-    elif band == "intermediate":
-        middle_en = [
-            f"{character_name} expected a manageable task, but {scene['twist_en']}.",
-            f"That change makes {character_name} less sure about the right words and the right timing.",
-            f"{character_name} wants to sound clear and helpful, yet the pressure grows stronger.",
-            f"One part of the problem is the English itself, and another part is how this moment may look to {scene['focus_en']}.",
-            f"{character_name} returns to {scene['support_en']} and tries to organize the next step.",
-            f"While the moment keeps moving, {character_name} weighs {scene['choice_en']}.",
-            f"{scene['stakes_en']}.",
-        ]
-        middle_ko = [
-            f"{character_name}는 해낼 수 있는 과제라고 생각했지만 {scene['twist_ko']}.",
-            f"그 변화 때문에 {character_name}는 어떤 말과 어떤 타이밍이 맞는지 덜 확신하게 된다.",
-            f"{character_name}는 분명하고 도움이 되게 말하고 싶지만 압박은 더 강해진다.",
-            f"문제의 한 부분은 영어 자체이고, 다른 한 부분은 이 순간이 {scene['focus_ko']}에게 어떻게 보일지에 대한 걱정이다.",
-            f"{character_name}는 {scene['support_ko']} 돌아보며 다음 단계를 정리하려고 한다.",
-            f"상황이 계속 움직이는 동안 {character_name}는 {scene['choice_ko']} 따져 본다.",
-            f"{scene['stakes_ko']}.",
-        ]
-    else:
-        middle_en = [
-            f"{character_name} expected a manageable moment, but {scene['twist_en']}.",
-            f"That shift creates pressure because {character_name} wants to sound clear, capable, and natural in English.",
-            f"{character_name} can see several possible responses, yet each one carries a different risk.",
-            f"One concern is the immediate task, and another is what this moment may do to {character_name}'s confidence.",
-            f"{character_name} therefore returns to {scene['support_en']} and mentally reorganizes the situation.",
-            f"While the moment keeps moving, {character_name} weighs {scene['choice_en']}.",
-            f"{scene['stakes_en']}, and the next response may shape future English situations as well.",
-        ]
-        middle_ko = [
-            f"{character_name}는 감당할 수 있는 순간이라고 생각했지만 {scene['twist_ko']}.",
-            f"그 변화는 {character_name}가 영어로 분명하고 유능하며 자연스럽게 들리고 싶어 하기 때문에 더 큰 압박을 만든다.",
-            f"{character_name}는 가능한 대응이 몇 가지 있다는 것을 알지만, 각각 다른 위험을 안고 있다.",
-            f"한 가지 걱정은 눈앞의 과제이고, 또 다른 걱정은 이 순간이 {character_name}의 자신감에 미칠 영향이다.",
-            f"그래서 {character_name}는 {scene['support_ko']} 다시 보며 상황을 머릿속으로 정리한다.",
-            f"순간이 계속 흘러가는 동안 {character_name}는 {scene['choice_ko']} 저울질한다.",
-            f"{scene['stakes_ko']}, 그리고 다음 반응은 앞으로의 영어 상황에도 영향을 줄 수 있다.",
-        ]
-
-    passage_sentences = [*open_en, *middle_en, close_en.format(name=character_name)]
-    passage_ko_sentences = [*open_ko, *middle_ko, close_ko.format(name=character_name)]
-    return passage_sentences, passage_ko_sentences
-
-
-def select_fallback_template(
-    cefr_level: str,
-    participant_signature: str,
-    nonce: str,
-    selected_background: str,
-    selected_genre: str,
-) -> dict:
-    character_name = deterministic_pick(
-        FALLBACK_DYNAMIC_CHARACTER_NAMES,
-        cefr_level,
-        participant_signature,
-        nonce,
-        selected_background,
-        selected_genre,
-    )
-    scene = FALLBACK_BACKGROUND_CONFIGS.get(selected_background, FALLBACK_BACKGROUND_CONFIGS["Daily life"])
-    story_title, story_title_ko = build_dynamic_fallback_title(
-        character_name=character_name,
-        selected_background=selected_background,
-        selected_genre=selected_genre,
-    )
-    passage_sentences, passage_ko_sentences = build_dynamic_fallback_sentences(
-        cefr_level=cefr_level,
-        character_name=character_name,
-        selected_background=selected_background,
-        selected_genre=selected_genre,
-    )
-
-    return {
-        "story_title": story_title,
-        "story_title_ko": story_title_ko,
-        "central_characters": character_name,
-        "character_focus": character_name,
-        "situation_focus": f"{character_name} and {scene['focus_en']}",
-        "relationship_focus": f"{character_name} and {scene['focus_en']}",
-        "relationship_focus_ko": f"{character_name}와 {scene['focus_ko']}",
-        "passage_sentences": passage_sentences,
-        "passage_ko_sentences": passage_ko_sentences,
-    }
-
 
 def normalize_prompt_map(payload: dict) -> dict:
     questions_payload = payload.get("questions", [])
@@ -1531,126 +394,6 @@ def apply_prompt_map_to_sections(prompt_map: dict) -> list:
             question["prompt_ko"] = generated["prompt_ko"]
 
     return sections
-
-
-def build_rule_based_prompt_map(questionnaire: dict) -> dict:
-    character_focus = questionnaire.get("character_focus", "the main character")
-    relationship_focus = questionnaire.get("relationship_focus", character_focus)
-    relationship_focus_ko = questionnaire.get("relationship_focus_ko", relationship_focus)
-
-    return {
-        "q1": {
-            "prompt": f"What happens in this passage involving {relationship_focus}? Explain the situation in your own words.",
-            "prompt_ko": f"이 지문에서 {relationship_focus_ko}와 관련해 어떤 일이 일어나나요? 자신의 말로 상황을 설명해 보세요.",
-        },
-        "q2": {
-            "prompt": "Which detail or turning point is most important for understanding this situation? Explain why it matters.",
-            "prompt_ko": "이 상황을 이해하는 데 가장 중요한 세부 내용이나 전환점은 무엇인가요? 왜 중요한지도 설명해 보세요.",
-        },
-        "q3": {
-            "prompt": f"How does {character_focus} feel in this situation? What detail in the passage shows that feeling?",
-            "prompt_ko": f"이 상황에서 {character_focus}는 어떻게 느끼나요? 그 감정을 보여 주는 지문 속 단서도 함께 설명해 보세요.",
-        },
-        "q4": {
-            "prompt": (
-                "In a similar situation in your own life, how would you feel? "
-                "Would you feel nervous, comfortable, interested, happy, or something else? Explain why."
-            ),
-            "prompt_ko": (
-                "당신의 삶에서 비슷한 상황이라면 어떤 기분이 들까요? "
-                "긴장되는지, 편안한지, 흥미로운지, 행복한지, 또는 다른 감정이 드는지와 그 이유를 설명해 보세요."
-            ),
-        },
-        "q5": {
-            "prompt": f"What might {character_focus} think or worry about at this moment? Explain your idea.",
-            "prompt_ko": f"이 순간 {character_focus}는 어떤 생각이나 걱정을 할까요? 그렇게 생각한 이유도 설명해 보세요.",
-        },
-        "q6": {
-            "prompt": (
-                "In a similar situation in your own life, what would you think about your own ability? "
-                "How would you notice your problem and try to manage it?"
-            ),
-            "prompt_ko": (
-                "당신의 삶에서 비슷한 상황이라면 자신의 능력에 대해 어떤 생각이 들까요? "
-                "자신의 문제를 어떻게 알아차리고 관리하려고 할지도 설명해 보세요."
-            ),
-        },
-        "q7": {
-            "prompt": f"What could {character_focus} do next? Which action seems most likely or most helpful?",
-            "prompt_ko": f"이 다음에 {character_focus}는 무엇을 할 수 있을까요? 가장 가능성이 크거나 가장 도움이 되는 행동도 설명해 보세요.",
-        },
-        "q8": {
-            "prompt": (
-                "In a similar situation in your own life, what would you do? "
-                "Would you speak, stay quiet, ask for help, prepare more, practice more, or avoid it? Explain."
-            ),
-            "prompt_ko": (
-                "당신의 삶에서 비슷한 상황이라면 어떻게 행동할까요? "
-                "말하려고 하는지, 조용히 있는지, 도움을 요청하는지, 더 준비하거나 연습하는지, 또는 피하려고 하는지 설명해 보세요."
-            ),
-        },
-        "q9": {
-            "prompt": f"What is the best strategy for {character_focus} in this situation? Why would it work?",
-            "prompt_ko": f"이 상황에서 {character_focus}에게 가장 좋은 전략은 무엇일까요? 왜 효과가 있을지도 설명해 보세요.",
-        },
-        "q10": {
-            "prompt": (
-                "In a similar situation in your own life, what strategy would help you most? "
-                "Explain what you would do and how it helps you."
-            ),
-            "prompt_ko": (
-                "당신의 삶에서 비슷한 상황이라면 어떤 전략이 가장 도움이 될까요? "
-                "무엇을 할 것인지와 그것이 어떻게 도움이 되는지 설명해 보세요."
-            ),
-        },
-    }
-
-
-def build_fallback_experiment(
-    cefr_level: str,
-    participant_signature: str,
-    nonce: str,
-    selected_background: str,
-    selected_genre: str,
-    reason: str,
-) -> dict:
-    template = select_fallback_template(
-        cefr_level=cefr_level,
-        participant_signature=participant_signature,
-        nonce=nonce,
-        selected_background=selected_background,
-        selected_genre=selected_genre,
-    )
-    questionnaire = dict(template)
-    questionnaire["id"] = "cefr_dynamic"
-    questionnaire["page_title"] = "CEFR Interactive Diagnostic"
-    questionnaire["page_title_ko"] = "CEFR 상호작용 진단"
-    questionnaire["intro"] = (
-        "Read the passage on the left and answer every question on the right in English. "
-        "Short answers are allowed, and longer answers are welcome."
-    )
-    questionnaire["intro_ko"] = (
-        "왼쪽 지문을 읽고 오른쪽 질문에 모두 영어로 답하세요. "
-        "짧은 답변도 가능하며, 더 길게 써도 됩니다."
-    )
-    questionnaire["cefr_level"] = cefr_level
-    questionnaire["central_characters"] = template.get("central_characters", template["character_focus"])
-    questionnaire["text"] = format_passage_markdown(template["story_title"], template["passage_sentences"])
-    questionnaire["text_ko"] = format_passage_markdown(template["story_title_ko"], template["passage_ko_sentences"])
-    questionnaire["passage_plain"] = " ".join(template["passage_sentences"])
-    questionnaire["passage_ko_plain"] = " ".join(template["passage_ko_sentences"])
-    questionnaire["passage_sentences"] = list(template["passage_sentences"])
-    questionnaire["passage_ko_sentences"] = list(template["passage_ko_sentences"])
-    questionnaire["selected_background"] = selected_background
-    questionnaire["selected_genre"] = selected_genre
-    questionnaire["sections"] = apply_prompt_map_to_sections(build_rule_based_prompt_map(questionnaire))
-    questionnaire["question_source"] = "rule_based"
-    questionnaire["question_model"] = ""
-    questionnaire["question_generation_note"] = (
-        f"{reason} Built-in fallback passage '{template['story_title']}' was created "
-        f"for background '{selected_background}' and genre '{selected_genre}'."
-    )
-    return questionnaire
 
 
 def normalize_experiment_payload(payload: dict, cefr_level: str) -> dict:
@@ -1720,74 +463,19 @@ def generate_experiment_with_openai(
     client = get_openai_client(api_key)
     question_slot_instructions = build_question_slot_instructions()
 
-    system_prompt = """
-You design one bilingual CEFR-based reading-and-response experiment for an English-education diagnostic app.
-Return valid JSON only.
-
-Requirements:
-- Create one passage with exactly 10 English sentences.
-- Match the CEFR level requested by the user.
-- Use one or two clear central characters in one meaningful situation with emotional, social, or decision-making stakes.
-- The passage can be about English learning or any broader real-life situation, as long as it supports emotionally and cognitively meaningful responses and gives enough context for evaluating fluency, emotion, cognition, behavior, and strategy through the follow-up questions.
-- The selected personal background and selected genre are mandatory constraints, not optional hints.
-- Structure the passage with a clear beginning, development, turning point, and closing outcome or reflection.
-- Create a fresh scenario for this participant and avoid repeating the same stock situation across different students.
-- Make the situation rich enough to support emotion, cognition, behavior, and strategy evaluation.
-- Create exactly 10 student-facing questions with ids q1 to q10.
-- Make the questions interactive, specific, learner-friendly, and natural enough to sound like real student prompts instead of a psychology checklist.
-- Make the questions open enough to reveal fluency features such as sentence length, connector use, structure complexity, organization, and strategy expression.
-- Include depth 2 by making the second question in each section meaningfully deeper than the first.
-- Keep self questions clearly connected to the learner's own feelings, thoughts, actions, or strategies in a similar situation.
-- Do not use technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or Oxford strategy type in the student-facing questions.
-- Make the Korean translations natural and faithful.
-"""
-
-    user_prompt = f"""
-Target CEFR level: {cefr_level}
-Participant name: {student_name}
-Participant number: {student_number}
-Variation seed: {variation_seed}
-Selected personal background: {selected_background}
-Selected genre: {selected_genre}
-
-Create a noticeably different passage across participants when possible.
-
-Design guidance:
-- Respect the selected background and genre throughout the passage.
-- The passage can be about English learning or any broader real-life situation, as long as it contains clear feelings, thoughts, decisions, and coping or strategy opportunities.
-- Let the 10 sentences move through introduction, development, tension or decision, and ending.
-- Make the questions useful for evaluation, but phrase them naturally for students.
-- Give students room to show fluency through connected explanation, not only through one-word or one-phrase answers.
-
-Evaluation criteria:
-{QUESTION_GENERATION_CRITERIA}
-
-Question slots:
-{question_slot_instructions}
-
-Return JSON only in this format:
-{{
-  "story_title": "...",
-  "story_title_ko": "...",
-  "central_characters": "...",
-  "situation_focus": "...",
-  "situation_focus_ko": "...",
-  "passage_sentences": ["...", "...", "...", "...", "...", "...", "...", "...", "...", "..."],
-  "passage_ko_sentences": ["...", "...", "...", "...", "...", "...", "...", "...", "...", "..."],
-  "questions": [
-    {{"id": "q1", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q2", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q3", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q4", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q5", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q6", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q7", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q8", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q9", "prompt": "....", "prompt_ko": "...."}},
-    {{"id": "q10", "prompt": "....", "prompt_ko": "...."}}
-  ]
-}}
-"""
+    system_prompt = load_prompt_template("generate_experiment", "system.txt")
+    user_prompt = load_prompt_template(
+        "generate_experiment",
+        "user.txt",
+        cefr_level=cefr_level,
+        student_name=student_name,
+        student_number=student_number,
+        variation_seed=variation_seed,
+        selected_background=selected_background,
+        selected_genre=selected_genre,
+        question_generation_criteria=QUESTION_GENERATION_CRITERIA,
+        question_slot_instructions=question_slot_instructions,
+    )
 
     completion = client.chat.completions.create(
         model=model,
@@ -1822,17 +510,8 @@ def build_generated_experiment(
     model: str,
     nonce: str,
 ) -> dict:
-    participant_signature = build_participant_signature(student_name, student_number)
-
     if not api_key:
-        return build_fallback_experiment(
-            cefr_level=cefr_level,
-            participant_signature=participant_signature,
-            nonce=nonce,
-            selected_background=selected_background,
-            selected_genre=selected_genre,
-            reason="OpenAI API key is not configured, so the app is using a built-in fallback passage and question set.",
-        )
+        raise ValueError("OpenAI API key is required to generate the passage and questions.")
 
     try:
         return generate_experiment_with_openai(
@@ -1845,15 +524,10 @@ def build_generated_experiment(
             api_key=api_key,
             model=model,
         )
-    except Exception:
-        return build_fallback_experiment(
-            cefr_level=cefr_level,
-            participant_signature=participant_signature,
-            nonce=nonce,
-            selected_background=selected_background,
-            selected_genre=selected_genre,
-            reason="OpenAI generation failed, so the app is using a built-in fallback passage and question set.",
-        )
+    except Exception as exc:
+        raise RuntimeError(
+            "OpenAI generation failed. Please check the API key, model setting, and prompt output format, then try again."
+        ) from exc
 
 
 # -----------------------------
@@ -1915,7 +589,7 @@ def count_matches(text: str, keywords: list) -> int:
     return sum(1 for keyword in keywords if keyword in text)
 
 
-def build_rule_based_answer_feedback(question: dict, answer: str) -> dict:
+def build_basic_answer_feedback(answer: str) -> dict:
     stripped = answer.strip()
     lower = stripped.lower()
 
@@ -1970,6 +644,14 @@ def build_rule_based_answer_feedback(question: dict, answer: str) -> dict:
     }
 
 
+def build_unavailable_answer_feedback() -> dict:
+    return {
+        "status": "valid",
+        "message": "LLM feedback is temporarily unavailable. Your answer is still recorded.",
+        "message_ko": "LLM 피드백을 일시적으로 사용할 수 없지만 답변은 기록됩니다.",
+    }
+
+
 def generate_answer_feedback_with_openai(
     questionnaire: dict,
     question: dict,
@@ -1979,37 +661,17 @@ def generate_answer_feedback_with_openai(
 ) -> dict:
     client = get_openai_client(api_key)
 
-    system_prompt = """
-You evaluate one learner answer for an English-education diagnostic app.
-Return valid JSON only.
-
-Rules:
-- Mark status as "rewrite" only when the answer is empty, says I don't know or no idea, is only symbols or random text, or is so strange that it cannot be used.
-- Mark status as "valid" for short, weak, grammatically incorrect, or partially incorrect English if it still looks like an attempt to answer.
-- If status is "rewrite", the message must explicitly say the answer is incomplete and must be rewritten.
-- Keep feedback short, warm, and direct.
-"""
-
-    user_prompt = f"""
-Passage title: {questionnaire['story_title']}
-Passage:
-{questionnaire['passage_plain']}
-
-Question layer: {question['layer']}
-Question type: {question['type']}
-Question:
-{question['prompt']}
-
-Learner answer:
-{answer}
-
-Return JSON only:
-{{
-  "status": "valid" or "rewrite",
-  "message": "...",
-  "message_ko": "..."
-}}
-"""
+    system_prompt = load_prompt_template("answer_feedback", "system.txt")
+    user_prompt = load_prompt_template(
+        "answer_feedback",
+        "user.txt",
+        story_title=questionnaire["story_title"],
+        passage_plain=questionnaire["passage_plain"],
+        question_layer=question["layer"],
+        question_type=question["type"],
+        question_prompt=question["prompt"],
+        answer=answer,
+    )
 
     completion = client.chat.completions.create(
         model=model,
@@ -2034,10 +696,13 @@ def get_answer_feedback(
 ) -> dict:
     questionnaire = json.loads(questionnaire_json)
     question = json.loads(question_json)
-    fallback = build_rule_based_answer_feedback(question, answer)
+    basic_feedback = build_basic_answer_feedback(answer)
 
-    if fallback["status"] == "rewrite" or not api_key:
-        return fallback
+    if basic_feedback["status"] == "rewrite":
+        return basic_feedback
+
+    if not api_key:
+        return build_unavailable_answer_feedback()
 
     try:
         return generate_answer_feedback_with_openai(
@@ -2048,7 +713,7 @@ def get_answer_feedback(
             model=model,
         )
     except Exception:
-        return fallback
+        return build_unavailable_answer_feedback()
 
 
 def build_pending_self_prompt(
@@ -2081,13 +746,13 @@ def build_pending_self_prompt(
     }
 
 
-def build_rule_based_personalized_self_prompt(question: dict) -> dict:
+def build_base_personalized_self_prompt(question: dict) -> dict:
     spec = get_personalized_self_spec(question["id"])
 
     return {
-        "prompt": spec["fallback_en"],
-        "prompt_ko": spec["fallback_ko"],
-        "prompt_source": "rule_based_personalized",
+        "prompt": question.get("base_prompt", question.get("prompt", "")),
+        "prompt_ko": question.get("base_prompt_ko", question.get("prompt_ko", "")),
+        "prompt_source": "base_prompt",
         "prompt_note": spec["note"],
         "ready_for_answer": True,
     }
@@ -2104,49 +769,20 @@ def generate_personalized_self_prompt_with_openai(
     client = get_openai_client(api_key)
     spec = get_personalized_self_spec(question["id"])
 
-    system_prompt = """
-You generate one interactive follow-up question for an English-education diagnostic app.
-Return valid JSON only.
-The question must be the second question in a part and must clearly connect to the learner's answer to the first question.
-If the follow-up question type is Self, it must move into the learner's own experience in a similar real-life situation.
-If the follow-up question type is Depth 2, it must stay focused on the passage and deepen the learner's reasoning.
-Use simple, learner-friendly English.
-Do not mention technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or strategy type.
-Make the Korean translation natural and faithful.
-"""
-
-    user_prompt = f"""
-Passage title: {questionnaire['story_title']}
-Passage:
-{questionnaire['passage_plain']}
-
-Current layer: {question['layer']}
-Follow-up question type: {question['type']}
-State targets: {spec.get('state_targets', '')}
-Instruction:
-{spec.get('criteria_focus', '')}
-
-Base follow-up direction:
-{question.get('base_prompt', question.get('prompt', ''))}
-
-First question in this part:
-{source_question['prompt']}
-
-Learner's answer to the first question:
-{source_answer}
-
-Create one interactive follow-up question that:
-1. Feels clearly linked to the learner's answer above.
-2. Matches the layer and question type.
-3. Sounds natural for a student questionnaire.
-4. Uses 1 or 2 short sentences.
-
-Return JSON only:
-{{
-  "prompt": "....",
-  "prompt_ko": "...."
-}}
-"""
+    system_prompt = load_prompt_template("personalized_self_prompt", "system.txt")
+    user_prompt = load_prompt_template(
+        "personalized_self_prompt",
+        "user.txt",
+        story_title=questionnaire["story_title"],
+        passage_plain=questionnaire["passage_plain"],
+        question_layer=question["layer"],
+        question_type=question["type"],
+        state_targets=spec.get("state_targets", ""),
+        criteria_focus=spec.get("criteria_focus", ""),
+        base_prompt=question.get("base_prompt", question.get("prompt", "")),
+        source_question_prompt=source_question["prompt"],
+        source_answer=source_answer,
+    )
 
     completion = client.chat.completions.create(
         model=model,
@@ -2183,10 +819,8 @@ def build_personalized_self_prompt(
     if not source_answer.strip() or source_feedback.get("status") != "valid":
         return build_pending_self_prompt(question, source_question, source_feedback)
 
-    fallback = build_rule_based_personalized_self_prompt(question)
-
     if not api_key:
-        return fallback
+        return build_base_personalized_self_prompt(question)
 
     try:
         return generate_personalized_self_prompt_with_openai(
@@ -2198,7 +832,7 @@ def build_personalized_self_prompt(
             model=model,
         )
     except Exception:
-        return fallback
+        return build_base_personalized_self_prompt(question)
 
 
 def materialize_questionnaire_for_answers(
@@ -2213,7 +847,7 @@ def materialize_questionnaire_for_answers(
     for question in get_all_questions(materialized):
         question["prompt"] = question.get("base_prompt", question.get("prompt", ""))
         question["prompt_ko"] = question.get("base_prompt_ko", question.get("prompt_ko", ""))
-        question["prompt_source"] = materialized.get("question_source", "rule_based")
+        question["prompt_source"] = materialized.get("question_source", "openai")
         question["prompt_note"] = ""
         question["ready_for_answer"] = True
 
@@ -2242,6 +876,55 @@ def materialize_questionnaire_for_answers(
         question.update(personalized)
 
     return materialized
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def materialize_questionnaire_for_answers_cached(
+    questionnaire_json: str,
+    answers_json: str,
+    api_key: str,
+    model: str,
+) -> dict:
+    questionnaire = json.loads(questionnaire_json)
+    answers = json.loads(answers_json)
+    return materialize_questionnaire_for_answers(
+        questionnaire=questionnaire,
+        answers=answers,
+        llm_config={
+            "api_key": api_key,
+            "model": model,
+        },
+    )
+
+
+@st.cache_data(show_spinner=False, ttl=86400)
+def build_answer_feedback_map(
+    questionnaire_json: str,
+    answers_json: str,
+    api_key: str,
+    model: str,
+) -> dict:
+    questionnaire = json.loads(questionnaire_json)
+    answers = json.loads(answers_json)
+    feedback_map = {}
+
+    for question in get_all_questions(questionnaire):
+        if not question.get("ready_for_answer", True):
+            continue
+
+        answer = answers.get(question["id"], "").strip()
+        if not answer:
+            continue
+
+        feedback_map[question["id"]] = get_answer_feedback(
+            questionnaire_json=questionnaire_json,
+            question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
+            answer=answer,
+            api_key=api_key,
+            model=model,
+        )
+
+    return feedback_map
 
 
 # -----------------------------
@@ -2549,7 +1232,7 @@ def evaluate_fluency(answers: dict) -> dict:
     }
 
 
-def classify_fla_fle(text: str) -> tuple:
+def classify_emotion(text: str) -> tuple:
     lower_text = text.lower()
 
     anxiety_keywords = [
@@ -2564,86 +1247,124 @@ def classify_fla_fle(text: str) -> tuple:
         "stressed",
         "panic",
         "embarrassed",
-        "hurt",
-        "sad",
-        "avoid",
-        "quiet",
         "mistake",
         "judge",
         "ashamed",
+        "fear",
+        "negative evaluation",
     ]
     anxiety_control_keywords = [
         "but i try",
         "but i still try",
-        "but sometimes i try",
         "try",
         "prepare",
         "practice",
         "check",
+        "manage",
+        "calm down",
     ]
-    calm_keywords = ["comfortable", "relaxed", "calm", "fine"]
+    calm_keywords = ["comfortable", "relaxed", "calm", "fine", "okay"]
 
-    enjoyment_keywords = [
+    motivation_high_keywords = [
+        "my goal",
+        "i want to improve",
+        "i want to get better",
+        "i want to speak better",
+        "for my future",
+        "for my dream",
+        "important for me",
+        "i really want",
+        "i want to use english well",
+        "i want to learn more",
+        "i keep trying",
+    ]
+    motivation_mid_keywords = [
+        "i want to",
+        "i need to",
+        "i should",
+        "i have to",
+        "i try",
+        "i will try",
+        "it is useful",
+        "it helps me",
+    ]
+    motivation_low_keywords = [
+        "i do not want",
+        "i don't want",
+        "no reason",
+        "not important",
+        "i do not care",
+        "i don't care",
+        "give up",
+        "not interested",
+    ]
+
+    enjoyment_high_keywords = [
         "enjoy",
         "fun",
         "interesting",
         "happy",
         "excited",
-        "good",
-        "comfortable",
-        "relaxed",
-        "warm",
-        "like",
-        "love",
-        "confident",
+        "proud",
+        "achievement",
+        "i like",
+        "i love",
+        "supported",
     ]
-    mixed_enjoyment_keywords = [
+    enjoyment_mid_keywords = [
         "okay",
         "sometimes enjoyable",
         "sometimes fun",
         "a little fun",
         "not bad",
+        "sometimes interesting",
     ]
-    low_enjoyment_keywords = [
+    enjoyment_low_keywords = [
         "boring",
         "do not like",
         "don't like",
         "not interesting",
         "hate",
-        "bad",
+        "uncomfortable",
+        "not enjoyable",
     ]
 
     anxiety_score = count_matches(lower_text, anxiety_keywords)
-    has_avoidance = contains_any(
-        lower_text,
-        ["avoid", "stay quiet", "silent", "do not speak", "don't speak"],
-    )
+    has_avoidance = contains_any(lower_text, ["avoid", "stay quiet", "silent", "do not speak", "don't speak"])
     has_anxiety_control = anxiety_score > 0 and contains_any(lower_text, anxiety_control_keywords)
 
     if anxiety_score >= 2 or (anxiety_score >= 1 and has_avoidance):
-        fla = "High"
+        anxiety = "High"
     elif anxiety_score >= 1 or has_anxiety_control:
-        fla = "Mid"
+        anxiety = "Mid"
     elif contains_any(lower_text, calm_keywords):
-        fla = "Low"
+        anxiety = "Low"
     else:
-        fla = "Low"
+        anxiety = "Low"
 
-    enjoyment_score = count_matches(lower_text, enjoyment_keywords)
+    if contains_any(lower_text, motivation_low_keywords):
+        motivation = "Low"
+    elif count_matches(lower_text, motivation_high_keywords) >= 1 or (contains_any(lower_text, ["goal", "future", "dream"]) and contains_any(lower_text, ["improve", "better", "learn"])):
+        motivation = "High"
+    elif contains_any(lower_text, motivation_mid_keywords):
+        motivation = "Mid"
+    else:
+        motivation = "Low"
 
+    enjoyment_score = count_matches(lower_text, enjoyment_high_keywords)
     if enjoyment_score >= 2:
-        fle = "High"
-    elif enjoyment_score >= 1 or contains_any(lower_text, mixed_enjoyment_keywords):
-        fle = "Mid"
-    elif contains_any(lower_text, low_enjoyment_keywords) or anxiety_score >= 1:
-        fle = "Low"
+        enjoyment = "High"
+    elif enjoyment_score >= 1 or contains_any(lower_text, enjoyment_mid_keywords):
+        enjoyment = "Mid"
+    elif contains_any(lower_text, enjoyment_low_keywords) or anxiety_score >= 1:
+        enjoyment = "Low"
     else:
-        fle = "Low"
+        enjoyment = "Low"
 
-    return fla, fle
+    return anxiety, motivation, enjoyment
 
 
-def classify_self_efficacy_metacognition(text: str) -> tuple:
+def classify_cognition(text: str) -> tuple:
     lower_text = text.lower()
 
     high_selfeff = [
@@ -2653,6 +1374,7 @@ def classify_self_efficacy_metacognition(text: str) -> tuple:
         "i can answer",
         "i can explain",
         "i can speak in english",
+        "i can handle it",
     ]
     mid_selfeff = [
         "i can, but",
@@ -2661,6 +1383,8 @@ def classify_self_efficacy_metacognition(text: str) -> tuple:
         "a little confident",
         "sometimes i can",
         "i can try",
+        "if i prepare",
+        "with help",
     ]
     low_selfeff = [
         "i cannot",
@@ -2670,8 +1394,8 @@ def classify_self_efficacy_metacognition(text: str) -> tuple:
         "i am bad",
         "too difficult",
         "hard for me",
-        "people may judge me",
         "i am not good at english",
+        "i cannot explain",
     ]
 
     meta_high = [
@@ -2684,14 +1408,44 @@ def classify_self_efficacy_metacognition(text: str) -> tuple:
         "i monitor",
         "i practice more",
         "i review",
+        "i notice",
+        "i choose",
+        "i will use",
     ]
     meta_mid = [
-        "i know i am weak",
-        "i know i need",
-        "i think i am weak",
+        "i know",
+        "i think i need",
         "sometimes",
         "maybe",
-        "i know",
+        "i should",
+        "i need to",
+    ]
+
+    attribution_high_keywords = [
+        "because i practiced",
+        "because i prepare",
+        "because i prepared",
+        "because i studied",
+        "because of my effort",
+        "because of my strategy",
+        "because i did not prepare",
+        "because i was nervous",
+        "because the task was difficult",
+        "because i used",
+        "the reason is",
+    ]
+    attribution_mid_keywords = [
+        "because",
+        "so",
+        "that is why",
+        "the reason",
+        "if i practice",
+        "if i prepare",
+    ]
+    attribution_low_keywords = [
+        "i don't know why",
+        "just because",
+        "no reason",
     ]
 
     if contains_any(lower_text, low_selfeff):
@@ -2703,14 +1457,23 @@ def classify_self_efficacy_metacognition(text: str) -> tuple:
     else:
         self_efficacy = "Mid"
 
-    if contains_any(lower_text, meta_high):
+    if count_matches(lower_text, meta_high) >= 2 or contains_any(lower_text, ["plan", "check", "monitor", "review"]) and contains_any(lower_text, ["problem", "mistake", "improve"]):
         metacognition = "High"
-    elif contains_any(lower_text, meta_mid):
+    elif contains_any(lower_text, meta_high) or contains_any(lower_text, meta_mid):
         metacognition = "Mid"
     else:
         metacognition = "Low"
 
-    return self_efficacy, metacognition
+    if contains_any(lower_text, attribution_low_keywords):
+        attribution_beliefs = "Low"
+    elif count_matches(lower_text, attribution_high_keywords) >= 1 or (contains_any(lower_text, ["because", "reason", "why"]) and contains_any(lower_text, ["practice", "prepare", "effort", "strategy", "mistake", "difficult"])):
+        attribution_beliefs = "High"
+    elif contains_any(lower_text, attribution_mid_keywords):
+        attribution_beliefs = "Mid"
+    else:
+        attribution_beliefs = "Low"
+
+    return self_efficacy, metacognition, attribution_beliefs
 
 
 def classify_behavior(text: str) -> tuple:
@@ -2816,33 +1579,31 @@ def classify_behavior(text: str) -> tuple:
 def classify_strategy(text: str) -> tuple:
     lower_text = text.lower()
 
-    strategy_types = []
-
-    cognitive_keywords = ["practice", "repeat", "write", "note", "read again", "memorize"]
-    metacognitive_keywords = ["plan", "check", "monitor", "prepare", "set a goal", "review"]
-    affective_keywords = ["calm", "relax", "positive", "encourage", "breathe", "feel better"]
-    social_keywords = ["ask friends", "ask teacher", "talk with friends", "study group", "peer"]
-    compensation_keywords = ["guess", "gesture", "simple words", "easy words", "use other words"]
+    strategy_keywords = {
+        "Memory": ["memorize", "memory", "repeat", "review words", "group words", "association", "image"],
+        "Compensation": ["guess", "gesture", "simple words", "easy words", "use other words", "paraphrase"],
+        "Cognitive": ["practice", "write", "note", "read again", "summarize", "analyze", "translate"],
+        "Metacognitive": ["plan", "check", "monitor", "prepare", "set a goal", "review", "organize", "evaluate"],
+        "Social": ["ask friends", "ask teacher", "talk with friends", "study group", "peer", "ask questions", "work with others"],
+        "Affective": ["calm", "relax", "positive", "encourage", "breathe", "feel better", "reduce anxiety"],
+    }
     avoidant_keywords = ["avoid", "give up", "stay quiet", "do nothing", "ignore"]
-    limited_keywords = ["only memorize", "just memorize"]
+    limited_keywords = ["only memorize", "just memorize", "just repeat only"]
+    effective_keywords = ["helps", "help me", "useful", "work well", "improve", "better"]
 
-    if contains_any(lower_text, cognitive_keywords):
-        strategy_types.append("Cognitive")
-    if contains_any(lower_text, metacognitive_keywords):
-        strategy_types.append("Metacognitive")
-    if contains_any(lower_text, affective_keywords):
-        strategy_types.append("Affective")
-    if contains_any(lower_text, social_keywords):
-        strategy_types.append("Social")
-    if contains_any(lower_text, compensation_keywords):
-        strategy_types.append("Compensation")
+    scores = {
+        strategy_name: count_matches(lower_text, keywords)
+        for strategy_name, keywords in strategy_keywords.items()
+    }
+    max_score = max(scores.values()) if scores else 0
 
-    if not strategy_types:
+    if max_score <= 0:
         strategy_type = "Unclear"
-    elif len(strategy_types) == 1:
-        strategy_type = strategy_types[0]
+        matched_types = []
     else:
-        strategy_type = "Mixed: " + ", ".join(strategy_types)
+        matched_types = [name for name, score in scores.items() if score == max_score and score > 0]
+        priority = ["Metacognitive", "Cognitive", "Compensation", "Social", "Affective", "Memory"]
+        strategy_type = next(name for name in priority if name in matched_types)
 
     if contains_any(lower_text, avoidant_keywords):
         strategy_quality = "Avoidant"
@@ -2850,7 +1611,7 @@ def classify_strategy(text: str) -> tuple:
         strategy_quality = "Limited"
     elif contains_any(lower_text, limited_keywords):
         strategy_quality = "Limited"
-    elif len(strategy_types) >= 2 or "helps" in lower_text:
+    elif len(matched_types) >= 2 or contains_any(lower_text, effective_keywords) or contains_any(lower_text, ["because it helps", "so i can", "to improve"]):
         strategy_quality = "Effective"
     else:
         strategy_quality = "Limited"
@@ -2860,13 +1621,13 @@ def classify_strategy(text: str) -> tuple:
 
 def evaluate_state(answers: dict) -> dict:
     fluency = evaluate_fluency(answers)
-    fla, fle = classify_fla_fle(answers.get("q4", ""))
-    self_efficacy, metacognition = classify_self_efficacy_metacognition(answers.get("q6", ""))
+    anxiety, motivation, enjoyment = classify_emotion(answers.get("q4", ""))
+    self_efficacy, metacognition, attribution_beliefs = classify_cognition(answers.get("q6", ""))
     wtc, coping, engagement = classify_behavior(answers.get("q8", ""))
     strategy_type, strategy_quality = classify_strategy(answers.get("q10", ""))
 
     return {
-        "evaluation_method": "criteria_rules_v3_dynamic_cefr",
+        "evaluation_method": "criteria_rules_v4_dynamic_cefr",
         "Fluency": fluency["Fluency"],
         "Fluency_sentence_length": fluency["Fluency_sentence_length"],
         "Fluency_connector_use": fluency["Fluency_connector_use"],
@@ -2876,19 +1637,21 @@ def evaluate_state(answers: dict) -> dict:
         "Fluency_state": fluency["Fluency_state"],
         "Fluency_connector_examples": fluency["Fluency_connector_examples"],
         "Fluency_feature_note": fluency["Fluency_feature_note"],
-        "FLA": fla,
-        "FLE": fle,
-        "Emotion_state": f"FLA: {fla} / FLE: {fle}",
+        "FLA": anxiety,
+        "Motivation": motivation,
+        "FLE": enjoyment,
+        "Emotion_state": f"Anxiety: {anxiety} / Motivation: {motivation} / Enjoyment: {enjoyment}",
         "Self_efficacy": self_efficacy,
         "Metacognition": metacognition,
-        "Cognition_state": f"Self-efficacy: {self_efficacy} / Metacognition: {metacognition}",
+        "Attribution_beliefs": attribution_beliefs,
+        "Cognition_state": f"Self-efficacy: {self_efficacy} / Metacognition: {metacognition} / Attribution-Beliefs: {attribution_beliefs}",
         "WTC": wtc,
         "Coping": coping,
         "Engagement": engagement,
         "Behavior_state": f"WTC: {wtc} / Coping: {coping} / Engagement: {engagement}",
         "Strategy_type": strategy_type,
         "Strategy_quality": strategy_quality,
-        "Strategy_state": f"Strategy Type: {strategy_type} / Strategy Quality: {strategy_quality}",
+        "Strategy_state": f"Oxford Strategy Type: {strategy_type} / Strategy Quality: {strategy_quality}",
     }
 
 
@@ -2934,7 +1697,7 @@ def build_response_row(
         "story_title_ko": questionnaire.get("story_title_ko", ""),
         "passage_text": questionnaire.get("passage_plain", ""),
         "passage_text_ko": questionnaire.get("passage_ko_plain", ""),
-        "question_source": questionnaire.get("question_source", "rule_based"),
+        "question_source": questionnaire.get("question_source", "openai"),
         "question_model": questionnaire.get("question_model", ""),
         "question_generation_note": questionnaire.get("question_generation_note", ""),
         "total_questions": len(get_all_questions(questionnaire)),
@@ -2949,7 +1712,7 @@ def build_response_row(
         row[f"{question['id']}_type"] = question["type"]
         row[f"{question['id']}_prompt"] = question["prompt"]
         row[f"{question['id']}_prompt_ko"] = question["prompt_ko"]
-        row[f"{question['id']}_prompt_source"] = question.get("prompt_source", questionnaire.get("question_source", "rule_based"))
+        row[f"{question['id']}_prompt_source"] = question.get("prompt_source", questionnaire.get("question_source", "openai"))
         row[f"{question['id']}_prompt_note"] = question.get("prompt_note", "")
         row[f"{question['id']}_response"] = answer
         row[f"{question['id']}_word_count"] = word_count(answer)
@@ -2985,7 +1748,7 @@ def build_evaluation_row(
         "situation_focus": questionnaire.get("situation_focus", questionnaire.get("relationship_focus", "")),
         "situation_focus_ko": questionnaire.get("relationship_focus_ko", ""),
         "story_title": questionnaire["story_title"],
-        "question_source": questionnaire.get("question_source", "rule_based"),
+        "question_source": questionnaire.get("question_source", "openai"),
         "question_model": questionnaire.get("question_model", ""),
         "evaluation_method": evaluation["evaluation_method"],
         "fluency_layer": "Cross-question",
@@ -3000,11 +1763,13 @@ def build_evaluation_row(
         "Fluency_feature_note": evaluation["Fluency_feature_note"],
         "emotion_layer": "Emotion",
         "FLA": evaluation["FLA"],
+        "Motivation": evaluation["Motivation"],
         "FLE": evaluation["FLE"],
         "Emotion_state": evaluation["Emotion_state"],
         "cognition_layer": "Cognition",
         "Self_efficacy": evaluation["Self_efficacy"],
         "Metacognition": evaluation["Metacognition"],
+        "Attribution_beliefs": evaluation["Attribution_beliefs"],
         "Cognition_state": evaluation["Cognition_state"],
         "behavior_layer": "Behavior",
         "WTC": evaluation["WTC"],
@@ -3042,7 +1807,12 @@ def validate_participant_inputs(
     return ""
 
 
-def validate_submission_answers(questionnaire: dict, answers: dict, llm_config: dict) -> str:
+def validate_submission_answers(
+    questionnaire: dict,
+    answers: dict,
+    llm_config: dict,
+    feedback_map: dict | None = None,
+) -> str:
     questionnaire_json = json.dumps(questionnaire, ensure_ascii=False, sort_keys=True)
 
     for question in get_all_questions(questionnaire):
@@ -3057,13 +1827,18 @@ def validate_submission_answers(questionnaire: dict, answers: dict, llm_config: 
         if not answer:
             return f"Please answer all questions / 모든 질문에 답해주세요."
 
-        feedback = get_answer_feedback(
-            questionnaire_json=questionnaire_json,
-            question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
-            answer=answer,
-            api_key=llm_config["api_key"],
-            model=llm_config["model"],
-        )
+        feedback = None
+        if feedback_map is not None:
+            feedback = feedback_map.get(question["id"])
+
+        if feedback is None:
+            feedback = get_answer_feedback(
+                questionnaire_json=questionnaire_json,
+                question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
+                answer=answer,
+                api_key=llm_config["api_key"],
+                model=llm_config["model"],
+            )
         if feedback["status"] != "valid":
             return (
                 f"{question['label']} needs revision: {feedback['message']} / "
@@ -3096,6 +1871,10 @@ def initialize_session_state():
         "saved_answers": {},
         "current_section_index": 0,
         "generation_nonce": "",
+        "materialized_questionnaire": {},
+        "materialized_signature": "",
+        "feedback_map": {},
+        "feedback_signature": "",
         "submission_complete": False,
         "last_submission_id": "",
         "last_response_file": "",
@@ -3123,6 +1902,27 @@ def set_saved_answer(question_id: str, answer: str):
     st.session_state.saved_answers = saved_answers
 
 
+def build_answers_snapshot(questionnaire: dict) -> dict:
+    saved_answers = get_saved_answers()
+    snapshot = {}
+
+    for question in get_all_questions(questionnaire):
+        snapshot[question["id"]] = st.session_state.get(
+            widget_key(question["id"]),
+            saved_answers.get(question["id"], ""),
+        ).strip()
+
+    return snapshot
+
+
+def serialize_answers_snapshot(questionnaire: dict, answers: dict) -> str:
+    ordered_answers = {
+        question["id"]: answers.get(question["id"], "").strip()
+        for question in get_all_questions(questionnaire)
+    }
+    return json.dumps(ordered_answers, ensure_ascii=False, sort_keys=True)
+
+
 def reset_session_state():
     clear_question_widgets()
     keys_to_clear = [
@@ -3140,6 +1940,10 @@ def reset_session_state():
         "saved_answers",
         "current_section_index",
         "generation_nonce",
+        "materialized_questionnaire",
+        "materialized_signature",
+        "feedback_map",
+        "feedback_signature",
         "submission_complete",
         "last_submission_id",
         "last_response_file",
@@ -3763,32 +2567,39 @@ if generate_clicked:
         st.error(participant_error)
     else:
         generation_nonce = uuid4().hex
-        with st.spinner(
-            "Generating the CEFR passage and interactive questionnaire. "
-            "The screen is being kept in a light-style view for readability."
-        ):
-            questionnaire = build_generated_experiment(
-                cefr_level=st.session_state.cefr_level_input,
-                student_name=st.session_state.student_name_input.strip(),
-                student_number=st.session_state.student_number_input.strip(),
-                selected_background=st.session_state.selected_background_input,
-                selected_genre=st.session_state.selected_genre_input,
-                api_key=llm_config["api_key"],
-                model=llm_config["model"],
-                nonce=generation_nonce,
-            )
-
-        clear_question_widgets()
-        st.session_state.saved_answers = {}
-        st.session_state.student_name_value = st.session_state.student_name_input.strip()
-        st.session_state.student_number_value = st.session_state.student_number_input.strip()
-        st.session_state.cefr_level_value = st.session_state.cefr_level_input
-        st.session_state.selected_background_value = st.session_state.selected_background_input
-        st.session_state.selected_genre_value = st.session_state.selected_genre_input
-        st.session_state.active_questionnaire = questionnaire
-        st.session_state.current_section_index = 0
-        st.session_state.generation_nonce = generation_nonce
-        st.rerun()
+        try:
+            with st.spinner(
+                "Generating the CEFR passage and interactive questionnaire. "
+                "The screen is being kept in a light-style view for readability."
+            ):
+                questionnaire = build_generated_experiment(
+                    cefr_level=st.session_state.cefr_level_input,
+                    student_name=st.session_state.student_name_input.strip(),
+                    student_number=st.session_state.student_number_input.strip(),
+                    selected_background=st.session_state.selected_background_input,
+                    selected_genre=st.session_state.selected_genre_input,
+                    api_key=llm_config["api_key"],
+                    model=llm_config["model"],
+                    nonce=generation_nonce,
+                )
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            clear_question_widgets()
+            st.session_state.saved_answers = {}
+            st.session_state.student_name_value = st.session_state.student_name_input.strip()
+            st.session_state.student_number_value = st.session_state.student_number_input.strip()
+            st.session_state.cefr_level_value = st.session_state.cefr_level_input
+            st.session_state.selected_background_value = st.session_state.selected_background_input
+            st.session_state.selected_genre_value = st.session_state.selected_genre_input
+            st.session_state.active_questionnaire = questionnaire
+            st.session_state.current_section_index = 0
+            st.session_state.generation_nonce = generation_nonce
+            st.session_state.materialized_questionnaire = {}
+            st.session_state.materialized_signature = ""
+            st.session_state.feedback_map = {}
+            st.session_state.feedback_signature = ""
+            st.rerun()
 
 questionnaire_ready = bool(st.session_state.active_questionnaire)
 
@@ -3813,7 +2624,7 @@ if google_sheets_config["enabled"]:
     )
 else:
     st.info(
-        "Storage mode: Local CSV fallback\n\n"
+        "Storage mode: Local CSV\n\n"
         f"Current local files: `{RESPONSES_FILE}` and `{EVALUATIONS_FILE}`\n\n"
         "For deployed apps, configure Google Sheets for persistent storage because local cloud files may not be kept after restart or redeploy."
     )
@@ -3826,8 +2637,8 @@ if llm_config["enabled"]:
     )
 else:
     st.warning(
-        "LLM mode: Fallback\n\n"
-        "OpenAI API key is not configured, so the app will use the built-in fallback passage, built-in question set, and rule-based answer checks."
+        "LLM mode: Inactive\n\n"
+        "OpenAI API key is not configured. Passage generation, answer feedback, and personalized follow-up generation require OpenAI to be enabled."
     )
 
 if not questionnaire_ready:
@@ -3835,30 +2646,61 @@ if not questionnaire_ready:
     st.stop()
 
 base_questionnaire = st.session_state.active_questionnaire
-saved_answers = get_saved_answers()
-current_answers_snapshot = {
-    question["id"]: st.session_state.get(
-        widget_key(question["id"]),
-        saved_answers.get(question["id"], ""),
-    ).strip()
-    for question in get_all_questions(base_questionnaire)
-}
+base_questionnaire_json = json.dumps(base_questionnaire, ensure_ascii=False, sort_keys=True)
+current_answers_snapshot = build_answers_snapshot(base_questionnaire)
+base_answers_json = serialize_answers_snapshot(base_questionnaire, current_answers_snapshot)
 
-with st.spinner(
-    "Analyzing answers and preparing the next interactive question. "
-    "The loading indicator is centered to keep the experiment flow clear for participants."
-):
-    current_questionnaire = materialize_questionnaire_for_answers(
-        questionnaire=base_questionnaire,
-        answers=current_answers_snapshot,
-        llm_config=llm_config,
-    )
+materialized_signature = hashlib.sha256(
+    f"{base_questionnaire_json}|{base_answers_json}|{llm_config['model']}|{llm_config['api_key']}".encode("utf-8")
+).hexdigest()
+
+if st.session_state.materialized_signature == materialized_signature:
+    current_questionnaire = deepcopy(st.session_state.materialized_questionnaire)
+else:
+    with st.spinner(
+        "Analyzing answers and preparing the next interactive question. "
+        "The loading indicator is centered to keep the experiment flow clear for participants."
+    ):
+        current_questionnaire = materialize_questionnaire_for_answers_cached(
+            questionnaire_json=base_questionnaire_json,
+            answers_json=base_answers_json,
+            api_key=llm_config["api_key"],
+            model=llm_config["model"],
+        )
+    st.session_state.materialized_questionnaire = current_questionnaire
+    st.session_state.materialized_signature = materialized_signature
+    st.session_state.feedback_map = {}
+    st.session_state.feedback_signature = ""
 
 if st.session_state.current_section_index >= len(current_questionnaire["sections"]):
     st.session_state.current_section_index = max(0, len(current_questionnaire["sections"]) - 1)
 
 current_section_index = st.session_state.current_section_index
 current_section = current_questionnaire["sections"][current_section_index]
+current_answers = {
+    question["id"]: current_answers_snapshot.get(question["id"], "").strip()
+    for question in get_all_questions(current_questionnaire)
+}
+questionnaire_json = json.dumps(current_questionnaire, ensure_ascii=False, sort_keys=True)
+current_answers_json = serialize_answers_snapshot(current_questionnaire, current_answers)
+feedback_signature = hashlib.sha256(
+    f"{questionnaire_json}|{current_answers_json}|{llm_config['model']}|{llm_config['api_key']}".encode("utf-8")
+).hexdigest()
+
+if st.session_state.feedback_signature == feedback_signature:
+    feedback_map = dict(st.session_state.feedback_map)
+else:
+    with st.spinner(
+        "Checking the current answers and updating completion status."
+    ):
+        feedback_map = build_answer_feedback_map(
+            questionnaire_json=questionnaire_json,
+            answers_json=current_answers_json,
+            api_key=llm_config["api_key"],
+            model=llm_config["model"],
+        )
+    st.session_state.feedback_map = feedback_map
+    st.session_state.feedback_signature = feedback_signature
 
 st.caption(
     f"Question status: {current_questionnaire.get('question_generation_note', '')}"
@@ -3866,14 +2708,17 @@ st.caption(
 st.info(
     "Answer guide: Every response must be written in English. "
     "Short answers are allowed. The app only asks for a rewrite when the answer is empty, says I don't know, or is too unclear to use. "
-    "In each part, Question 1 appears first, and Question 2 is generated from the answer to Question 1.\n\n"
+    "In each part, Question 1 appears first, and Question 2 is generated from the answer to Question 1. "
+    "After editing a part, click Check This Part to refresh the feedback and unlock the next follow-up question.\n\n"
     "답변 가이드: 짧은 답변도 가능합니다. 답이 비어 있거나 I don't know이거나 사용하기 어려울 만큼 이상한 경우에만 다시 쓰라는 안내가 나옵니다. "
-    "각 파트에서는 1번 질문이 먼저 나오고, 2번 질문은 1번 답변을 보고 생성됩니다."
+    "각 파트에서는 1번 질문이 먼저 나오고, 2번 질문은 1번 답변을 보고 생성됩니다. "
+    "답을 수정한 뒤에는 Check This Part 버튼을 눌러 피드백과 다음 질문을 새로 반영해 주세요."
 )
 
 passage_col, question_col = st.columns([0.9, 1.3], gap="large")
 
 previous_clicked = False
+check_part_clicked = False
 next_clicked = False
 submit_clicked = False
 
@@ -3899,127 +2744,134 @@ with question_col:
     )
 
     total_questions = len(get_all_questions(current_questionnaire))
-    questionnaire_json = json.dumps(current_questionnaire, ensure_ascii=False, sort_keys=True)
-    current_answers = {
-        question["id"]: st.session_state.get(
-            widget_key(question["id"]),
-            get_saved_answers().get(question["id"], ""),
-        ).strip()
-        for question in get_all_questions(current_questionnaire)
-    }
-
-    render_section_header(current_section)
-    st.caption(f"Part {current_section_index + 1} of {len(current_questionnaire['sections'])}")
-
     section_completed_questions = 0
     section_total_questions = len(current_section["questions"])
 
+    with st.form(
+        key=f"question_section_form_{st.session_state.generation_nonce}_{current_section_index}",
+        clear_on_submit=False,
+    ):
+        render_section_header(current_section)
+        st.caption(f"Part {current_section_index + 1} of {len(current_questionnaire['sections'])}")
+
+        for question in current_section["questions"]:
+            question_key = widget_key(question["id"])
+            if not question.get("ready_for_answer", True):
+                st.session_state[question_key] = ""
+                current_answers[question["id"]] = ""
+            elif question_key not in st.session_state:
+                st.session_state[question_key] = current_answers.get(question["id"], "")
+            render_question_card(question)
+
+            answer = st.text_area(
+                f"{question['label']}. {question['prompt']}",
+                key=question_key,
+                label_visibility="collapsed",
+                height=170,
+                disabled=not question.get("ready_for_answer", True),
+                placeholder=(
+                    "Write a simple English answer. Short answers are okay."
+                    if question.get("ready_for_answer", True)
+                    else "The follow-up question will open after the first answer in this part is usable."
+                ),
+            )
+            answer = answer.strip()
+            current_answers[question["id"]] = answer
+
+            if not question.get("ready_for_answer", True):
+                render_status_box(
+                    "status-box-neutral",
+                    "This follow-up will open after the previous answer can be used to create the next question.",
+                )
+                continue
+
+            if not answer:
+                render_status_box(
+                    "status-box-neutral",
+                    "Write an answer for this question, then click Check This Part.",
+                )
+                continue
+
+            feedback = feedback_map.get(question["id"])
+            if feedback and feedback["status"] == "valid":
+                section_completed_questions += 1
+                render_status_box(
+                    "status-box-valid",
+                    f"Complete. {feedback['message']} / {feedback['message_ko']}",
+                )
+            elif feedback:
+                render_status_box(
+                    "status-box-rewrite",
+                    f"{feedback['message']} / {feedback['message_ko']}",
+                )
+            else:
+                render_status_box(
+                    "status-box-neutral",
+                    "Click Check This Part to refresh the answer check.",
+                )
+
+        completed_questions = 0
+        for question in get_all_questions(current_questionnaire):
+            answer = current_answers.get(question["id"], "").strip()
+            if not question.get("ready_for_answer", True) or not answer:
+                continue
+
+            feedback = feedback_map.get(question["id"])
+            if feedback and feedback["status"] == "valid":
+                completed_questions += 1
+
+        section_complete = section_completed_questions == section_total_questions
+
+        st.markdown("### Completion")
+        st.caption(f"Current part: {section_completed_questions} / {section_total_questions}")
+        st.progress(section_completed_questions / section_total_questions if section_total_questions else 0.0)
+        st.caption(f"Overall: {completed_questions} / {total_questions}")
+        st.progress(completed_questions / total_questions if total_questions else 0.0)
+
+        if not section_complete:
+            st.caption("Finish this part first. Then the Next button will be available.")
+
+        nav_col1, nav_col2, nav_col3 = st.columns(3)
+        with nav_col1:
+            previous_clicked = st.form_submit_button(
+                "Previous Part",
+                use_container_width=True,
+                disabled=(current_section_index == 0),
+            )
+        with nav_col2:
+            check_part_clicked = st.form_submit_button(
+                "Check This Part",
+                use_container_width=True,
+            )
+        with nav_col3:
+            if current_section_index < len(current_questionnaire["sections"]) - 1:
+                next_clicked = st.form_submit_button(
+                    "Next Part",
+                    use_container_width=True,
+                    disabled=(not section_complete or profile_changed_after_generation),
+                )
+            else:
+                submit_clicked = st.form_submit_button(
+                    "Submit Responses",
+                    use_container_width=True,
+                    disabled=(not section_complete or profile_changed_after_generation),
+                )
+
+form_submitted = previous_clicked or check_part_clicked or next_clicked or submit_clicked
+
+if form_submitted:
     for question in current_section["questions"]:
         question_key = widget_key(question["id"])
         if not question.get("ready_for_answer", True):
             st.session_state[question_key] = ""
+            current_answers[question["id"]] = ""
             set_saved_answer(question["id"], "")
-        elif question_key not in st.session_state:
-            st.session_state[question_key] = get_saved_answers().get(question["id"], "")
-        render_question_card(question)
-
-        answer = st.text_area(
-            f"{question['label']}. {question['prompt']}",
-            key=question_key,
-            label_visibility="collapsed",
-            height=170,
-            disabled=not question.get("ready_for_answer", True),
-            placeholder=(
-                "Write a simple English answer. Short answers are okay."
-                if question.get("ready_for_answer", True)
-                else "The follow-up question will open after the first answer in this part is usable."
-            ),
-        )
-        answer = answer.strip()
-        current_answers[question["id"]] = answer
-        set_saved_answer(question["id"], answer)
-
-        if not question.get("ready_for_answer", True):
-            render_status_box(
-                "status-box-neutral",
-                "This follow-up will open after the previous answer can be used to create the next question.",
-            )
             continue
 
-        if not answer:
-            render_status_box(
-                "status-box-neutral",
-                "Write an answer for this question to continue.",
-            )
-            continue
-
-        feedback = get_answer_feedback(
-            questionnaire_json=questionnaire_json,
-            question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
-            answer=answer,
-            api_key=llm_config["api_key"],
-            model=llm_config["model"],
-        )
-
-        if feedback["status"] == "valid":
-            section_completed_questions += 1
-            render_status_box(
-                "status-box-valid",
-                f"Complete. {feedback['message']} / {feedback['message_ko']}",
-            )
-        else:
-            render_status_box(
-                "status-box-rewrite",
-                f"{feedback['message']} / {feedback['message_ko']}",
-            )
-
-    completed_questions = 0
-    for question in get_all_questions(current_questionnaire):
-        answer = current_answers.get(question["id"], "").strip()
-        if not question.get("ready_for_answer", True) or not answer:
-            continue
-
-        feedback = get_answer_feedback(
-            questionnaire_json=questionnaire_json,
-            question_json=json.dumps(question, ensure_ascii=False, sort_keys=True),
-            answer=answer,
-            api_key=llm_config["api_key"],
-            model=llm_config["model"],
-        )
-        if feedback["status"] == "valid":
-            completed_questions += 1
-
-    section_complete = section_completed_questions == section_total_questions
-
-    st.markdown("### Completion")
-    st.caption(f"Current part: {section_completed_questions} / {section_total_questions}")
-    st.progress(section_completed_questions / section_total_questions if section_total_questions else 0.0)
-    st.caption(f"Overall: {completed_questions} / {total_questions}")
-    st.progress(completed_questions / total_questions if total_questions else 0.0)
-
-    if not section_complete:
-        st.caption("Finish this part first. Then the Next button will be available.")
-
-    nav_col1, nav_col2 = st.columns(2)
-    with nav_col1:
-        previous_clicked = st.button(
-            "Previous Part",
-            use_container_width=True,
-            disabled=(current_section_index == 0),
-        )
-    with nav_col2:
-        if current_section_index < len(current_questionnaire["sections"]) - 1:
-            next_clicked = st.button(
-                "Next Part",
-                use_container_width=True,
-                disabled=(not section_complete or profile_changed_after_generation),
-            )
-        else:
-            submit_clicked = st.button(
-                "Submit Responses",
-                use_container_width=True,
-                disabled=(not section_complete or profile_changed_after_generation),
-            )
+        normalized_answer = st.session_state.get(question_key, "").strip()
+        st.session_state[question_key] = normalized_answer
+        current_answers[question["id"]] = normalized_answer
+        set_saved_answer(question["id"], normalized_answer)
 
 
 if previous_clicked:
@@ -4048,6 +2900,7 @@ if submit_clicked:
             questionnaire=current_questionnaire,
             answers=current_answers,
             llm_config=llm_config,
+            feedback_map=feedback_map,
         )
 
         if validation_error:
