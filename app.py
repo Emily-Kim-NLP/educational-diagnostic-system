@@ -926,6 +926,38 @@ Return JSON only:
     return normalize_answer_feedback_payload(payload)
 
 
+def build_local_answer_feedback(answer: str) -> dict:
+    stripped = answer.strip()
+    normalized_lower = re.sub(r"\s+", " ", stripped.lower())
+
+    if not stripped:
+        return {
+            "status": "rewrite",
+            "message": "Your answer is incomplete. Please write something for this question.",
+            "message_ko": "답변이 비어 있습니다. 이 질문에 대해 내용을 적어 주세요.",
+        }
+
+    if re.fullmatch(r"[\W_]+", stripped, flags=re.UNICODE):
+        return {
+            "status": "rewrite",
+            "message": "Your answer is incomplete. Please write words, not only symbols or punctuation.",
+            "message_ko": "답변이 불완전합니다. 기호만 쓰지 말고 단어로 적어 주세요.",
+        }
+
+    if re.fullmatch(r"(?:i\s+don't\s+know|i\s+do\s+not\s+know|dont\s+know|idk|no\s+idea)[.!? ]*", normalized_lower):
+        return {
+            "status": "rewrite",
+            "message": "Your answer is incomplete because it says I don't know. Please try to write anything you can.",
+            "message_ko": "답변이 I don't know로 되어 있어 불완전합니다. 할 수 있는 만큼이라도 적어 주세요.",
+        }
+
+    return {
+        "status": "valid",
+        "message": "Recorded. This answer can be used to create the next question.",
+        "message_ko": "기록되었습니다. 이 답변을 바탕으로 다음 질문을 만들 수 있습니다.",
+    }
+
+
 @st.cache_data(show_spinner=False, ttl=86400)
 def get_answer_feedback(
     questionnaire_json: str,
@@ -934,19 +966,7 @@ def get_answer_feedback(
     api_key: str,
     model: str,
 ) -> dict:
-    questionnaire = json.loads(questionnaire_json)
-    question = json.loads(question_json)
-
-    if not api_key:
-        raise ValueError("OpenAI API key is not configured. Answer feedback requires OpenAI.")
-
-    return generate_answer_feedback_with_openai(
-        questionnaire=questionnaire,
-        question=question,
-        answer=answer,
-        api_key=api_key,
-        model=model,
-    )
+    return build_local_answer_feedback(answer)
 
 
 def build_pending_self_prompt(
@@ -997,6 +1017,7 @@ Additional instruction for Q2:
 - Use both the passage and the learner's Q1 answer, not only one of them.
 - Stay in the Understanding layer.
 - Ask the learner to expand, clarify, support, or refine the idea they already gave in Q1.
+- If the learner's Q1 answer is short, partial, or grammatically weak but still meaningful, treat it as usable and build the next question from the main idea the learner actually gave.
 - Anchor the follow-up in a reason, key detail, cause, turning point, or evidence from the passage.
 - Make the question open enough to invite a longer connected response, not a yes/no answer or a single quoted detail.
 - Help reveal fluency features such as sentence development, connector use, linked ideas, organization, and explanation.
@@ -1008,7 +1029,7 @@ Return valid JSON only.
 The question must be the second question in a part and must clearly connect to the learner's answer to the first question.
 If the follow-up question type is Self, it must move into the learner's own experience in a similar real-life situation.
 If the follow-up question type is Depth 2, it must stay focused on the passage and deepen the learner's reasoning.
-If the follow-up is Q2 in the Understanding section, it must clearly use both the passage and the learner's Q1 answer, and it should invite a fuller connected explanation so fluency features such as sentence development, connector use, linked ideas, and organization can be observed.
+If the follow-up is Q2 in the Understanding section, it must clearly use both the passage and the learner's Q1 answer, and it should invite a fuller connected explanation so fluency features such as sentence development, connector use, linked ideas, and organization can be observed. Even when the learner's Q1 answer is short, partial, or grammatically weak, use the meaningful part of that answer instead of treating it as unusable.
 Use simple, learner-friendly English.
 Do not mention technical labels such as FLA, FLE, self-efficacy, metacognition, WTC, coping, engagement, or strategy type.
 Make the Korean translation natural and faithful.
@@ -2848,12 +2869,12 @@ if llm_config["enabled"]:
     st.success(
         "LLM mode: Active\n\n"
         f"Model: `{llm_config['model']}`\n\n"
-        "The app will generate the CEFR passage, interactive questions, answer checks, and personalized self follow-ups with OpenAI when possible."
+        "The app will generate the CEFR passage, interactive questions, and personalized self follow-ups with OpenAI when possible. Basic answer usability checks are handled locally."
     )
 else:
     st.warning(
         "LLM mode: Inactive\n\n"
-        "OpenAI API key is not configured. Passage generation, answer checks, and personalized follow-up generation require OpenAI."
+        "OpenAI API key is not configured. Passage generation and personalized follow-up generation require OpenAI. Basic answer usability checks still work locally."
     )
 
 if not questionnaire_ready:
@@ -2936,10 +2957,10 @@ st.caption(
 )
 st.info(
     "Answer guide: Every response must be written in English. "
-    "Short answers are allowed. The app only asks for a rewrite when the answer is empty, says I don't know, or is too unclear to use. "
+    "Short answers are allowed. The app only asks for a rewrite when the answer is blank, says I don't know, or contains only symbols or punctuation. "
     "In each part, Question 1 appears first, and Question 2 is generated from the answer to Question 1. "
     "After editing a part, click Check This Part to refresh the feedback and unlock the next follow-up question.\n\n"
-    "답변 가이드: 짧은 답변도 가능합니다. 답이 비어 있거나 I don't know이거나 사용하기 어려울 만큼 이상한 경우에만 다시 쓰라는 안내가 나옵니다. "
+    "답변 가이드: 짧은 답변도 가능합니다. 답이 비어 있거나 I don't know이거나 기호만 있는 경우에만 다시 쓰라는 안내가 나옵니다. "
     "각 파트에서는 1번 질문이 먼저 나오고, 2번 질문은 1번 답변을 보고 생성됩니다. "
     "답을 수정한 뒤에는 Check This Part 버튼을 눌러 피드백과 다음 질문을 새로 반영해 주세요."
 )
