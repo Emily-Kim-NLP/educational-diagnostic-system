@@ -356,6 +356,22 @@ QUESTION_SECTION_BLUEPRINTS = [
     },
 ]
 
+def build_question_slot_instructions() -> str:
+    lines = []
+
+    for section in QUESTION_SECTION_BLUEPRINTS:
+        lines.append(f"{section['title']} / {section['title_ko']}")
+        for question in section["questions"]:
+            lines.append(
+                f"- {question['id']} ({question['layer']} / {question['type']}): {question['question_goal']}"
+            )
+            if question.get("criteria_focus"):
+                lines.append(f"  Criteria focus: {question['criteria_focus']}")
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+
 QUESTION_GENERATION_CRITERIA = """
 Layer and evaluation targets:
 
