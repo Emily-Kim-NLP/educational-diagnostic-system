@@ -317,7 +317,18 @@ def normalize_private_key(private_key: str) -> str:
 
     normalized = normalized.replace("\\n", "\n")
     normalized = normalized.replace("\r\n", "\n")
-    return normalized
+
+    result_lines = []
+    for line in normalized.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("-----"):
+            result_lines.append(line)
+        else:
+            # Convert URL-safe base64 characters to standard base64
+            result_lines.append(line.replace("-", "+").replace("_", "/"))
+    return "\n".join(result_lines) + "\n"
 
 
 def normalize_service_account_info(service_account_info: dict) -> dict:
@@ -2627,6 +2638,61 @@ def inject_custom_styles():
             border: 1px solid rgba(148, 163, 184, 0.2);
         }
 
+        .checklist-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            margin: 0.6rem 0 1rem 0;
+        }
+
+        .checklist-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 12px;
+            background: rgba(241, 245, 249, 0.7);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .checklist-section-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #374151 !important;
+            min-width: 140px;
+            flex-shrink: 0;
+        }
+
+        .checklist-questions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .checklist-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.22rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            background: #f1f5f9;
+            color: #94a3b8 !important;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+        }
+
+        .checklist-item-answered {
+            background: rgba(219, 234, 254, 0.8);
+            color: #1d4ed8 !important;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+        }
+
+        .checklist-item-valid {
+            background: rgba(220, 252, 231, 0.9);
+            color: #166534 !important;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
         .placeholder-shell {
             border-radius: 28px;
             padding: 1.4rem 1.2rem;
@@ -3178,10 +3244,41 @@ with question_col:
         section_complete = section_completed_questions == section_total_questions
 
         st.markdown("### Completion")
-        st.caption(f"Current part: {section_completed_questions} / {section_total_questions}")
-        st.progress(section_completed_questions / section_total_questions if section_total_questions else 0.0)
-        st.caption(f"Overall: {completed_questions} / {total_questions}")
-        st.progress(completed_questions / total_questions if total_questions else 0.0)
+        checklist_rows = []
+        for cl_section in current_questionnaire["sections"]:
+            badges = []
+            for cl_q in cl_section["questions"]:
+                qid = cl_q["id"]
+                label = cl_q.get("label", qid)
+                has_answer = bool(current_answers.get(qid, "").strip())
+                cl_fb = feedback_map.get(qid)
+                is_valid = bool(cl_fb and cl_fb.get("status") == "valid")
+
+                if is_valid:
+                    item_class = "checklist-item checklist-item-valid"
+                    icon = "&#10003;"
+                elif has_answer:
+                    item_class = "checklist-item checklist-item-answered"
+                    icon = "&#10003;"
+                else:
+                    item_class = "checklist-item"
+                    icon = "&#9675;"
+
+                badges.append(
+                    f"<span class='{item_class}'>{icon} {html.escape(label)}</span>"
+                )
+
+            checklist_rows.append(
+                f"<div class='checklist-row'>"
+                f"<span class='checklist-section-title'>{html.escape(cl_section.get('title', ''))}</span>"
+                f"<span class='checklist-questions'>{''.join(badges)}</span>"
+                f"</div>"
+            )
+
+        st.markdown(
+            f"<div class='checklist-grid'>{''.join(checklist_rows)}</div>",
+            unsafe_allow_html=True,
+        )
 
         if not section_complete:
             st.caption("Finish this part first. Then the Next button will be available.")
