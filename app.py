@@ -2646,6 +2646,61 @@ def inject_custom_styles():
             border: 1px solid rgba(148, 163, 184, 0.2);
         }
 
+        .check-box {
+            border-radius: 14px;
+            padding: 0.65rem 0.9rem;
+            margin: 0.25rem 0 1rem 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.65rem;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .check-box-complete {
+            background: rgba(220, 252, 231, 0.8);
+            border: 1.5px solid rgba(34, 197, 94, 0.35);
+            color: #1f5b33 !important;
+        }
+
+        .check-box-pending {
+            background: rgba(241, 245, 249, 0.88);
+            border: 1.5px solid rgba(148, 163, 184, 0.3);
+            color: #516476 !important;
+        }
+
+        .check-box-rewrite {
+            background: rgba(255, 241, 242, 0.88);
+            border: 1.5px solid rgba(244, 63, 94, 0.25);
+            color: #7f1d1d !important;
+        }
+
+        .check-box-icon {
+            font-size: 1.25rem;
+            line-height: 1;
+            flex-shrink: 0;
+            margin-top: 0.05rem;
+        }
+
+        .check-box-header {
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.15rem;
+        }
+
+        .check-box-detail {
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
+
+        .question-label-prefix {
+            color: #a55b1f;
+            font-weight: 900;
+            margin-right: 0.25em;
+        }
+
         .checklist-grid {
             display: flex;
             flex-direction: column;
@@ -2812,7 +2867,7 @@ def render_question_card(question: dict, is_complete: bool = False):
             f"<span class='question-chip question-chip-type'>{html.escape(question['type'])}</span>"
             f"{badge_html}"
             "</div>"
-            f"<div class='question-prompt'>{html.escape(question['prompt'])}</div>"
+            f"<div class='question-prompt'><span class='question-label-prefix'>{html.escape(question['label'])}.</span> {html.escape(question['prompt'])}</div>"
             f"<div class='question-ko'>한국어 해석: {html.escape(question['prompt_ko'])}</div>"
             f"{note_html}"
             "</div>"
@@ -2864,6 +2919,38 @@ def render_passage_panel(questionnaire: dict, student_name: str, student_number:
 def render_status_box(style_name: str, text: str):
     st.markdown(
         f"<div class='status-box {style_name}'>{html.escape(text)}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_check_status_box(state: str, label: str, detail: str = ""):
+    """
+    Render a per-question Check status box.
+    state: 'complete' | 'rewrite' | 'pending'
+    label: short header text (e.g. 'Complete', 'Rewrite needed', 'Not checked yet')
+    detail: optional longer message shown below the label
+    """
+    if state == "complete":
+        box_class = "check-box check-box-complete"
+        icon = "&#10003;"
+    elif state == "rewrite":
+        box_class = "check-box check-box-rewrite"
+        icon = "&#9888;"
+    else:
+        box_class = "check-box check-box-pending"
+        icon = "&#9675;"
+
+    detail_html = (
+        f"<div class='check-box-detail'>{html.escape(detail)}</div>" if detail else ""
+    )
+    st.markdown(
+        f"<div class='{box_class}'>"
+        f"<span class='check-box-icon'>{icon}</span>"
+        f"<div>"
+        f"<div class='check-box-header'>Check &mdash; {html.escape(label)}</div>"
+        f"{detail_html}"
+        f"</div>"
+        f"</div>",
         unsafe_allow_html=True,
     )
 
@@ -3208,35 +3295,40 @@ with question_col:
             current_answers[question["id"]] = answer
 
             if not question.get("ready_for_answer", True):
-                render_status_box(
-                    "status-box-neutral",
+                render_check_status_box(
+                    "pending",
+                    "Waiting",
                     "This follow-up will open after the previous answer can be used to create the next question.",
                 )
                 continue
 
             if not answer:
-                render_status_box(
-                    "status-box-neutral",
-                    "Write an answer for this question, then click Check This Part.",
+                render_check_status_box(
+                    "pending",
+                    "Not answered yet",
+                    "Write an answer above, then click Check This Part to confirm completion.",
                 )
                 continue
 
             feedback = feedback_map.get(question["id"])
             if feedback and feedback["status"] == "valid":
                 section_completed_questions += 1
-                render_status_box(
-                    "status-box-valid",
-                    f"Complete. {feedback['message']} / {feedback['message_ko']}",
+                render_check_status_box(
+                    "complete",
+                    "Complete",
+                    f"{feedback['message']} / {feedback['message_ko']}",
                 )
             elif feedback:
-                render_status_box(
-                    "status-box-rewrite",
+                render_check_status_box(
+                    "rewrite",
+                    "Rewrite needed",
                     f"{feedback['message']} / {feedback['message_ko']}",
                 )
             else:
-                render_status_box(
-                    "status-box-neutral",
-                    "Click Check This Part to refresh the answer check.",
+                render_check_status_box(
+                    "pending",
+                    "Ready to check",
+                    "Click Check This Part below to verify this answer.",
                 )
 
         completed_questions = 0
