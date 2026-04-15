@@ -979,7 +979,21 @@ def period_sentence_count(text: str) -> int:
     return len(parts)
 
 
-def build_local_answer_feedback(question: dict, answer: str) -> dict:
+def contains_korean(text: str) -> bool:
+    return bool(re.search(r"[\uAC00-\uD7AF\u3130-\u318F]", text))
+
+
+def is_sentence_copied_from_passage(answer: str, passage_sentences: list) -> bool:
+    normalized_answer = re.sub(r"\s+", " ", answer.strip().lower())
+    for sentence in passage_sentences:
+        normalized_sentence = re.sub(r"\s+", " ", sentence.strip().lower())
+        # Only check sentences that are long enough to be meaningful (5+ words)
+        if len(normalized_sentence.split()) >= 5 and normalized_sentence in normalized_answer:
+            return True
+    return False
+
+
+def build_local_answer_feedback(question: dict, answer: str, passage_sentences: list = None) -> dict:
     stripped = answer.strip()
     normalized_lower = re.sub(r"\s+", " ", stripped.lower())
 
@@ -997,11 +1011,25 @@ def build_local_answer_feedback(question: dict, answer: str) -> dict:
             "message_ko": "답변이 불완전합니다. 기호만 쓰지 말고 단어로 적어 주세요.",
         }
 
+    if contains_korean(stripped):
+        return {
+            "status": "rewrite",
+            "message": "Please write your answer in English only. Korean answers cannot be accepted.",
+            "message_ko": "답변은 영어로만 작성해 주세요. 한국어 답변은 인정되지 않습니다.",
+        }
+
     if re.fullmatch(r"(?:i\s+don't\s+know|i\s+do\s+not\s+know|dont\s+know|idk|no\s+idea)[.!? ]*", normalized_lower):
         return {
             "status": "rewrite",
             "message": "Your answer is incomplete because it says I don't know. Please try to write anything you can.",
             "message_ko": "답변이 I don't know로 되어 있어 불완전합니다. 할 수 있는 만큼이라도 적어 주세요.",
+        }
+
+    if passage_sentences and is_sentence_copied_from_passage(stripped, passage_sentences):
+        return {
+            "status": "rewrite",
+            "message": "Your answer copies a sentence from the passage. Please write the answer in your own words.",
+            "message_ko": "지문의 문장을 그대로 복사했습니다. 자신의 말로 다시 작성해 주세요.",
         }
 
     if question.get("id") == "q1" and period_sentence_count(stripped) < 2:
@@ -1034,7 +1062,9 @@ def get_answer_feedback(
     model: str,
 ) -> dict:
     question = json.loads(question_json)
-    return build_local_answer_feedback(question, answer)
+    questionnaire = json.loads(questionnaire_json)
+    passage_sentences = questionnaire.get("passage_sentences", [])
+    return build_local_answer_feedback(question, answer, passage_sentences)
 
 
 def build_pending_self_prompt(
