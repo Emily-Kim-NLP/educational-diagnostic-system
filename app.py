@@ -3213,49 +3213,105 @@ if st.session_state.submission_complete:
 
     # ── Cognition ─────────────────────────────────────────────
     st.markdown("<div class='result-section-title'>Cognition / 인지</div>", unsafe_allow_html=True)
+    self_efficacy = ev.get("Self_efficacy", "—")
+    metacognition = ev.get("Metacognition", "—")
     cognition_subs = [
-        ("Self-Efficacy", ev.get("Self_efficacy", "—")),
-        ("Metacognition", ev.get("Metacognition", "—")),
+        ("Self-Efficacy", self_efficacy),
+        ("Metacognition", metacognition),
     ]
+    se_desc = {
+        "High": "영어 사용에 대한 자신감이 높게 나타났습니다.",
+        "Mid": "영어 사용에 대한 자신감이 보통 수준입니다.",
+        "Low": "영어 사용에 대한 자신감이 낮게 나타났습니다.",
+    }.get(self_efficacy, "")
+    mc_desc = {
+        "High": "자신의 학습 상태를 잘 인식하고 스스로 조절하는 능력이 높습니다.",
+        "Mid": "학습에 대한 인식은 있으나 조절 행동이 부분적으로 나타납니다.",
+        "Low": "자기 인식과 조절 능력이 아직 낮은 편입니다.",
+    }.get(metacognition, "")
     st.markdown(
         f"<div class='result-card'>"
         f"<div class='result-card-title'>Self-Efficacy &amp; Metacognition</div>"
         f"{_sub_items(cognition_subs)}"
-        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085'>"
-        f"자신감(Self-Efficacy)과 자기 인식·조절 능력(Metacognition)을 평가합니다.</div>"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
+        f"<b>Self-Efficacy:</b> {html.escape(se_desc)}<br>"
+        f"<b>Metacognition:</b> {html.escape(mc_desc)}"
+        f"</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
 
     # ── Behavior ──────────────────────────────────────────────
     st.markdown("<div class='result-section-title'>Behavior / 행동</div>", unsafe_allow_html=True)
+    wtc = ev.get("WTC", "—")
+    coping = ev.get("Coping", "—")
+    engagement = ev.get("Engagement", "—")
     behavior_subs = [
-        ("WTC", ev.get("WTC", "—")),
-        ("Coping", ev.get("Coping", "—")),
-        ("Engagement", ev.get("Engagement", "—")),
+        ("WTC", wtc),
+        ("Coping", coping),
+        ("Engagement", engagement),
     ]
+    wtc_desc = {
+        "High": "영어로 적극적으로 소통하려는 의지가 높습니다.",
+        "Mid": "상황에 따라 소통 의지가 달라지는 편입니다.",
+        "Low": "영어 소통을 회피하거나 조용히 있는 경향이 있습니다.",
+    }.get(wtc, "")
+    coping_desc = {
+        "Active": "어려움이 생겼을 때 연습, 질문, 준비 등 능동적으로 대처합니다.",
+        "Mixed": "능동적 대처와 회피 행동이 함께 나타납니다.",
+        "Avoidant": "어려움이 생겼을 때 회피하거나 포기하는 경향이 있습니다.",
+    }.get(coping, "")
+    eng_desc = {
+        "High": "수업에 적극적으로 참여하고 상호작용하는 편입니다.",
+        "Mid": "수업 참여가 제한적이거나 상황에 따라 다릅니다.",
+        "Low": "수업 참여도가 낮고 수동적인 경향이 있습니다.",
+    }.get(engagement, "")
     st.markdown(
         f"<div class='result-card'>"
         f"<div class='result-card-title'>Willingness to Communicate &amp; Coping</div>"
         f"{_sub_items(behavior_subs)}"
-        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085'>"
-        f"소통 의지(WTC), 어려움 대처 방식(Coping), 수업 참여도(Engagement)를 평가합니다.</div>"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
+        f"<b>WTC:</b> {html.escape(wtc_desc)}<br>"
+        f"<b>Coping:</b> {html.escape(coping_desc)}<br>"
+        f"<b>Engagement:</b> {html.escape(eng_desc)}"
+        f"</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
 
     # ── Strategy ──────────────────────────────────────────────
     st.markdown("<div class='result-section-title'>Strategy / 전략</div>", unsafe_allow_html=True)
+    strategy_type = ev.get("Strategy_type", "—")
+    strategy_quality = ev.get("Strategy_quality", "—")
     strategy_subs = [
-        ("Type", ev.get("Strategy_type", "—")),
-        ("Quality", ev.get("Strategy_quality", "—")),
+        ("Type", strategy_type),
+        ("Quality", strategy_quality),
     ]
+    type_desc_map = {
+        "Cognitive": "암기, 반복, 노트 정리 등 인지 전략을 주로 사용합니다.",
+        "Metacognitive": "계획 세우기, 자기 점검 등 메타인지 전략을 주로 사용합니다.",
+        "Affective": "긍정적 사고, 긴장 완화 등 정서 조절 전략을 주로 사용합니다.",
+        "Social": "친구나 선생님에게 도움을 구하는 사회적 전략을 주로 사용합니다.",
+        "Compensation": "쉬운 표현, 추측, 몸짓 등 보완 전략을 주로 사용합니다.",
+        "Unclear": "특정 전략 유형이 뚜렷하게 나타나지 않았습니다.",
+    }
+    type_desc = next(
+        (desc for key, desc in type_desc_map.items() if strategy_type.startswith(key)),
+        f"{strategy_type} 전략을 사용합니다." if strategy_type not in ("—", "Unclear") else "특정 전략 유형이 뚜렷하게 나타나지 않았습니다.",
+    )
+    quality_desc = {
+        "Effective": "전략이 목표에 잘 맞고 효과적으로 활용되고 있습니다.",
+        "Limited": "전략을 사용하지만 단순하거나 반복적인 경향이 있습니다.",
+        "Avoidant": "어려움을 회피하는 방식으로 대처하는 경향이 있습니다.",
+    }.get(strategy_quality, "")
     st.markdown(
         f"<div class='result-card'>"
         f"<div class='result-card-title'>Learning Strategy</div>"
         f"{_sub_items(strategy_subs)}"
-        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085'>"
-        f"학습 전략의 유형(Type)과 효과성(Quality)을 평가합니다.</div>"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
+        f"<b>Type:</b> {html.escape(type_desc)}<br>"
+        f"<b>Quality:</b> {html.escape(quality_desc)}"
+        f"</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
