@@ -2196,6 +2196,7 @@ def initialize_session_state():
         "last_evaluation_file": "",
         "last_storage_backend": "",
         "generation_error": "",
+        "last_evaluation_result": {},
     }
 
     for key, value in defaults.items():
@@ -2277,6 +2278,7 @@ def reset_session_state():
         "last_evaluation_file",
         "last_storage_backend",
         "generation_error",
+        "last_evaluation_result",
     ]
     for key in keys_to_clear:
         st.session_state.pop(key, None)
@@ -2794,6 +2796,122 @@ def inject_custom_styles():
             box-shadow: 0 22px 48px rgba(18, 38, 58, 0.08);
             text-align: center;
         }
+
+        .result-page-header {
+            font-size: 1.7rem;
+            font-weight: 900;
+            color: #102437 !important;
+            margin-bottom: 0.2rem;
+            letter-spacing: -0.02em;
+        }
+
+        .result-page-sub {
+            font-size: 1rem;
+            color: #5a7085 !important;
+            margin-bottom: 1.5rem;
+        }
+
+        .result-section-title {
+            font-size: 1.1rem;
+            font-weight: 900;
+            color: #13263b !important;
+            margin: 1.4rem 0 0.6rem 0;
+            letter-spacing: -0.01em;
+        }
+
+        .result-card {
+            border-radius: 22px;
+            padding: 1.1rem 1.2rem 1rem 1.2rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid #e0d5c5;
+            background: rgba(255, 251, 245, 0.95);
+            box-shadow: 0 8px 20px rgba(18, 38, 58, 0.06);
+        }
+
+        .result-card-title {
+            font-size: 0.75rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #8a7060 !important;
+            margin-bottom: 0.55rem;
+        }
+
+        .result-overall-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .result-level-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.35rem 1rem;
+            border-radius: 999px;
+            font-size: 1rem;
+            font-weight: 900;
+            letter-spacing: 0.02em;
+        }
+
+        .result-level-high {
+            background: rgba(220, 252, 231, 0.9);
+            color: #166534 !important;
+            border: 1.5px solid rgba(34, 197, 94, 0.35);
+        }
+
+        .result-level-mid {
+            background: rgba(254, 243, 199, 0.9);
+            color: #92400e !important;
+            border: 1.5px solid rgba(245, 158, 11, 0.35);
+        }
+
+        .result-level-low {
+            background: rgba(254, 226, 226, 0.9);
+            color: #991b1b !important;
+            border: 1.5px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .result-level-label {
+            font-size: 0.88rem;
+            color: #445566 !important;
+        }
+
+        .result-sub-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin-top: 0.1rem;
+        }
+
+        .result-sub-item {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.4rem 0.75rem;
+            border-radius: 12px;
+            background: rgba(241, 245, 249, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            min-width: 110px;
+        }
+
+        .result-sub-name {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #64748b !important;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.2rem;
+        }
+
+        .result-sub-value {
+            font-size: 0.85rem;
+            font-weight: 800;
+        }
+
+        .result-sub-high { color: #166534 !important; }
+        .result-sub-mid  { color: #92400e !important; }
+        .result-sub-low  { color: #991b1b !important; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -3001,20 +3119,157 @@ inject_custom_styles()
 render_page_header()
 
 if st.session_state.submission_complete:
-    st.success("All responses and evaluations have been saved.")
-    st.write(f"Name / 이름: `{st.session_state.student_name_value}`")
-    st.write(f"Student Number / 학번: `{st.session_state.student_number_value}`")
-    st.write(f"CEFR Level: `{st.session_state.cefr_level_value}`")
-    st.write(f"Background / 배경: `{st.session_state.selected_background_value}`")
-    st.write(f"Genre / 장르: `{st.session_state.selected_genre_value}`")
-    st.write(f"Submission ID: `{st.session_state.last_submission_id}`")
-    st.write(f"Storage backend: `{st.session_state.last_storage_backend}`")
-    st.write(f"Responses destination: `{st.session_state.last_response_file}`")
-    st.write(f"Evaluations destination: `{st.session_state.last_evaluation_file}`")
+    ev = st.session_state.get("last_evaluation_result", {})
 
+    def _level_badge(level: str) -> str:
+        cls = {"High": "result-level-high", "Mid": "result-level-mid"}.get(level, "result-level-low")
+        return f"<span class='result-level-badge {cls}'>{html.escape(level)}</span>"
+
+    def _sub_value_class(level: str) -> str:
+        return {"High": "result-sub-high", "Mid": "result-sub-mid"}.get(level, "result-sub-low")
+
+    def _sub_items(items: list) -> str:
+        parts = []
+        for name, value in items:
+            vc = _sub_value_class(value)
+            parts.append(
+                f"<div class='result-sub-item'>"
+                f"<span class='result-sub-name'>{html.escape(name)}</span>"
+                f"<span class='result-sub-value {vc}'>{html.escape(value)}</span>"
+                f"</div>"
+            )
+        return f"<div class='result-sub-grid'>{''.join(parts)}</div>"
+
+    st.success("모든 답변이 저장되었습니다! Your responses have been saved.")
+
+    st.markdown(
+        f"<div class='result-page-header'>Your Diagnostic Results</div>"
+        f"<div class='result-page-sub'>"
+        f"{html.escape(st.session_state.student_name_value)} &nbsp;|&nbsp; "
+        f"Student No. {html.escape(st.session_state.student_number_value)} &nbsp;|&nbsp; "
+        f"CEFR {html.escape(st.session_state.cefr_level_value)}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Fluency ──────────────────────────────────────────────
+    st.markdown("<div class='result-section-title'>Fluency / 유창성</div>", unsafe_allow_html=True)
+    fluency_overall = ev.get("Fluency", "—")
+    fluency_subs = [
+        ("Sentence Length", ev.get("Fluency_sentence_length", "—")),
+        ("Connector Use", ev.get("Fluency_connector_use", "—")),
+        ("Structure", ev.get("Fluency_structure_complexity", "—")),
+        ("Organization", ev.get("Fluency_organization", "—")),
+        ("Strategy Use", ev.get("Fluency_strategy_expression", "—")),
+    ]
+    connector_examples = ev.get("Fluency_connector_examples", "")
+    connector_note = (
+        f"Connectors used / 사용한 연결어: <b>{html.escape(connector_examples)}</b><br>"
+        if connector_examples else ""
+    )
+    st.markdown(
+        f"<div class='result-card'>"
+        f"<div class='result-card-title'>Overall Fluency Level</div>"
+        f"<div class='result-overall-row'>"
+        f"{_level_badge(fluency_overall)}"
+        f"<span class='result-level-label'>전반적 유창성 수준</span>"
+        f"</div>"
+        f"{_sub_items(fluency_subs)}"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085'>{connector_note}"
+        f"문장 길이, 연결어 사용, 구조 복잡성, 조직력, 전략 표현을 종합하여 평가합니다.</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Emotion ───────────────────────────────────────────────
+    st.markdown("<div class='result-section-title'>Emotion / 감정</div>", unsafe_allow_html=True)
+    fla = ev.get("FLA", "—")
+    fle = ev.get("FLE", "—")
+    emotion_subs = [
+        ("Anxiety (FLA)", fla),
+        ("Enjoyment (FLE)", fle),
+    ]
+    fla_desc = {
+        "High": "외국어 사용 시 불안감이 높게 나타났습니다.",
+        "Mid": "외국어 사용 시 불안과 조절이 함께 나타났습니다.",
+        "Low": "외국어 사용 시 불안이 낮고 안정적입니다.",
+    }.get(fla, "")
+    fle_desc = {
+        "High": "외국어 학습에 대한 즐거움과 흥미가 높습니다.",
+        "Mid": "외국어 학습에 대해 보통 수준의 흥미를 보입니다.",
+        "Low": "외국어 학습에 대한 즐거움이 낮게 나타났습니다.",
+    }.get(fle, "")
+    st.markdown(
+        f"<div class='result-card'>"
+        f"<div class='result-card-title'>Foreign Language Anxiety &amp; Enjoyment</div>"
+        f"{_sub_items(emotion_subs)}"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
+        f"<b>Anxiety:</b> {html.escape(fla_desc)}<br>"
+        f"<b>Enjoyment:</b> {html.escape(fle_desc)}"
+        f"</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Cognition ─────────────────────────────────────────────
+    st.markdown("<div class='result-section-title'>Cognition / 인지</div>", unsafe_allow_html=True)
+    cognition_subs = [
+        ("Self-Efficacy", ev.get("Self_efficacy", "—")),
+        ("Metacognition", ev.get("Metacognition", "—")),
+    ]
+    st.markdown(
+        f"<div class='result-card'>"
+        f"<div class='result-card-title'>Self-Efficacy &amp; Metacognition</div>"
+        f"{_sub_items(cognition_subs)}"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085'>"
+        f"자신감(Self-Efficacy)과 자기 인식·조절 능력(Metacognition)을 평가합니다.</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Behavior ──────────────────────────────────────────────
+    st.markdown("<div class='result-section-title'>Behavior / 행동</div>", unsafe_allow_html=True)
+    behavior_subs = [
+        ("WTC", ev.get("WTC", "—")),
+        ("Coping", ev.get("Coping", "—")),
+        ("Engagement", ev.get("Engagement", "—")),
+    ]
+    st.markdown(
+        f"<div class='result-card'>"
+        f"<div class='result-card-title'>Willingness to Communicate &amp; Coping</div>"
+        f"{_sub_items(behavior_subs)}"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085'>"
+        f"소통 의지(WTC), 어려움 대처 방식(Coping), 수업 참여도(Engagement)를 평가합니다.</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Strategy ──────────────────────────────────────────────
+    st.markdown("<div class='result-section-title'>Strategy / 전략</div>", unsafe_allow_html=True)
+    strategy_subs = [
+        ("Type", ev.get("Strategy_type", "—")),
+        ("Quality", ev.get("Strategy_quality", "—")),
+    ]
+    st.markdown(
+        f"<div class='result-card'>"
+        f"<div class='result-card-title'>Learning Strategy</div>"
+        f"{_sub_items(strategy_subs)}"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085'>"
+        f"학습 전략의 유형(Type)과 효과성(Quality)을 평가합니다.</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("Start New Participant", use_container_width=True):
         reset_session_state()
         st.rerun()
+
+    with st.expander("Admin info"):
+        st.write(f"Submission ID: `{st.session_state.last_submission_id}`")
+        st.write(f"Storage backend: `{st.session_state.last_storage_backend}`")
+        st.write(f"Responses destination: `{st.session_state.last_response_file}`")
+        st.write(f"Evaluations destination: `{st.session_state.last_evaluation_file}`")
 
     st.stop()
 
@@ -3548,6 +3803,7 @@ if submit_clicked:
             else:
                 st.session_state.last_submission_id = submission_id
                 st.session_state.last_storage_backend = response_save_result["backend"]
+                st.session_state.last_evaluation_result = evaluate_state(current_answers)
 
                 if response_save_result["backend"] == "google_sheets":
                     st.session_state.last_response_file = (
