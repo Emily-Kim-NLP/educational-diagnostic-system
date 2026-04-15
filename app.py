@@ -8,6 +8,7 @@ from datetime import datetime
 from uuid import uuid4
 
 import gspread
+import language_tool_python
 import pandas as pd
 import streamlit as st
 from openai import OpenAI
@@ -22,6 +23,35 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+
+# -----------------------------
+# Grammar checker (cached — loads LanguageTool Java server once per session)
+# -----------------------------
+@st.cache_resource(show_spinner="Loading grammar checker…")
+def _get_language_tool():
+    return language_tool_python.LanguageTool("en-US")
+
+
+# Rule categories to ignore (punctuation/style/typos produce too many false positives for EFL learners)
+_GRAMMAR_IGNORE_CATEGORIES = {
+    "TYPOGRAPHY",
+    "PUNCTUATION",
+    "CASING",
+    "STYLE",
+    "REDUNDANCY",
+    "PLAIN_ENGLISH",
+    "MISC",
+    "TYPOS",          # Missing apostrophes (dont → don't) are minor for EFL learners
+}
+_GRAMMAR_IGNORE_RULE_IDS = {
+    "UPPERCASE_SENTENCE_START",
+    "SENTENCE_WHITESPACE",
+    "COMMA_PARENTHESIS_WHITESPACE",
+    "EN_QUOTES",
+    "DOUBLE_PUNCTUATION",
+    "WORD_CONTAINS_UNDERSCORE",
+}
 
 
 # -----------------------------
@@ -1329,53 +1359,40 @@ def build_answer_feedback_map(
 # -----------------------------
 def detect_grammar_errors(text: str) -> str:
     """
-    Detect common EFL grammar errors and return High / Mid / Low.
-    High  = no clear errors found
-    Mid   = 1 error pattern found
-    Low   = 2+ error patterns found
+    Use LanguageTool to detect grammar errors and return High / Mid / Low.
+
+    Scoring is based on error density (errors per 100 words) so that
+    longer answers are not unfairly penalised compared to short ones.
+
+    Density thresholds (calibrated for EFL short-answer writing):
+      High : < 10 errors per 100 words  (fluent, minor slips acceptable)
+      Mid  : 10–22 errors per 100 words
+      Low  : > 22 errors per 100 words
     """
-    if not text:
+    if not text or not text.strip():
         return "High"
 
-    lower = re.sub(r"\s+", " ", text.strip().lower())
-    errors = 0
-
-    # 1. Third-person singular missing -s/es: "he go", "she have", "it make"
-    base_verbs = (
-        r"go|have|do|make|come|get|say|know|think|look|want|give|use|find|like|need|work|try|feel|"
-        r"become|leave|put|mean|keep|show|hear|play|run|live|hold|bring|write|sit|stand|lose|pay|"
-        r"meet|stop|speak|read|spend|grow|open|walk|win|remember|love|buy|wait|die|send|expect|"
-        r"build|stay|fall|reach|suggest|pass|sell|decide|pull|help|start|ask|learn|change|talk|"
-        r"turn|watch|see|take|eat|drink|sleep|study|seem|appear|happen|begin|end|continue"
-    )
-    if re.search(rf"\b(he|she|it)\s+({base_verbs})\b", lower):
-        errors += 1
-
-    # 2. Modal + gerund: "can going", "will doing", "must studying"
-    if re.search(r"\b(can|could|will|would|should|must|may|might)\s+\w+ing\b", lower):
-        errors += 1
-
-    # 3. Double negatives: "don't have no", "can't do nothing"
-    if re.search(
-        r"\b(don't|doesn't|didn't|can't|won't|wouldn't|couldn't|shouldn't)\s+\w*\s*(no|nothing|nobody|nowhere|never|none)\b",
-        lower,
-    ):
-        errors += 1
-
-    # 4. Wrong comparative: "more better", "more faster", "more easier"
-    if re.search(r"\bmore\s+(better|worse|faster|harder|easier|bigger|smaller|older|younger|longer|shorter|higher|lower)\b", lower):
-        errors += 1
-
-    # 5. Missing article before singular role nouns after copula
-    if re.search(
-        r"\b(am|is|are|was|were|become|became)\s+(student|teacher|doctor|engineer|nurse|lawyer|leader|manager|expert|beginner|professor|researcher)\b",
-        lower,
-    ):
-        errors += 1
-
-    if errors <= 2:
+    try:
+        tool = _get_language_tool()
+        matches = tool.check(text)
+    except Exception:
+        # If LanguageTool is unavailable, fall back to High to avoid blocking
         return "High"
-    if errors <= 4:
+
+    # Filter out noise (punctuation/style/casing rules)
+    filtered = [
+        m for m in matches
+        if m.category not in _GRAMMAR_IGNORE_CATEGORIES
+        and m.rule_id not in _GRAMMAR_IGNORE_RULE_IDS
+    ]
+
+    error_count = len(filtered)
+    wc = max(len(text.split()), 1)
+    density = error_count / wc * 100  # errors per 100 words
+
+    if density < 10:
+        return "High"
+    if density <= 22:
         return "Mid"
     return "Low"
 

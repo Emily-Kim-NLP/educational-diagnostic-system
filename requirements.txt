@@ -2,3 +2,4 @@ streamlit
 pandas
 gspread
 openai
+language-tool-python
