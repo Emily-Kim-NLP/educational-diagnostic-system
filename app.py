@@ -1327,6 +1327,59 @@ def build_answer_feedback_map(
 # -----------------------------
 # Evaluation helpers
 # -----------------------------
+def detect_grammar_errors(text: str) -> str:
+    """
+    Detect common EFL grammar errors and return High / Mid / Low.
+    High  = no clear errors found
+    Mid   = 1 error pattern found
+    Low   = 2+ error patterns found
+    """
+    if not text:
+        return "High"
+
+    lower = re.sub(r"\s+", " ", text.strip().lower())
+    errors = 0
+
+    # 1. Third-person singular missing -s/es: "he go", "she have", "it make"
+    base_verbs = (
+        r"go|have|do|make|come|get|say|know|think|look|want|give|use|find|like|need|work|try|feel|"
+        r"become|leave|put|mean|keep|show|hear|play|run|live|hold|bring|write|sit|stand|lose|pay|"
+        r"meet|stop|speak|read|spend|grow|open|walk|win|remember|love|buy|wait|die|send|expect|"
+        r"build|stay|fall|reach|suggest|pass|sell|decide|pull|help|start|ask|learn|change|talk|"
+        r"turn|watch|see|take|eat|drink|sleep|study|seem|appear|happen|begin|end|continue"
+    )
+    if re.search(rf"\b(he|she|it)\s+({base_verbs})\b", lower):
+        errors += 1
+
+    # 2. Modal + gerund: "can going", "will doing", "must studying"
+    if re.search(r"\b(can|could|will|would|should|must|may|might)\s+\w+ing\b", lower):
+        errors += 1
+
+    # 3. Double negatives: "don't have no", "can't do nothing"
+    if re.search(
+        r"\b(don't|doesn't|didn't|can't|won't|wouldn't|couldn't|shouldn't)\s+\w*\s*(no|nothing|nobody|nowhere|never|none)\b",
+        lower,
+    ):
+        errors += 1
+
+    # 4. Wrong comparative: "more better", "more faster", "more easier"
+    if re.search(r"\bmore\s+(better|worse|faster|harder|easier|bigger|smaller|older|younger|longer|shorter|higher|lower)\b", lower):
+        errors += 1
+
+    # 5. Missing article before singular role nouns after copula
+    if re.search(
+        r"\b(am|is|are|was|were|become|became)\s+(student|teacher|doctor|engineer|nurse|lawyer|leader|manager|expert|beginner|professor|researcher)\b",
+        lower,
+    ):
+        errors += 1
+
+    if errors <= 2:
+        return "High"
+    if errors <= 4:
+        return "Mid"
+    return "Low"
+
+
 def detect_connectors(text: str) -> list:
     if not text:
         return []
@@ -1444,6 +1497,7 @@ def analyze_fluency_features(text: str) -> dict:
     structure_markers = detect_structure_markers(text)
     organization_markers = detect_organization_markers(text)
     strategy_expressions = detect_strategy_expressions(text)
+    grammar_label = detect_grammar_errors(text)
 
     avg_sentence_length = wc / sc if sc else 0.0
 
@@ -1490,6 +1544,7 @@ def analyze_fluency_features(text: str) -> dict:
             structure_label,
             organization_label,
             strategy_label,
+            grammar_label,
         ]
     )
     high_feature_count = sum(
@@ -1500,6 +1555,7 @@ def analyze_fluency_features(text: str) -> dict:
             structure_label,
             organization_label,
             strategy_label,
+            grammar_label,
         ]
     )
 
@@ -1528,6 +1584,7 @@ def analyze_fluency_features(text: str) -> dict:
         "structure_label": structure_label,
         "organization_label": organization_label,
         "strategy_label": strategy_label,
+        "grammar_label": grammar_label,
         "overall_label": overall_label,
     }
 
@@ -1551,9 +1608,10 @@ def evaluate_fluency(answers: dict) -> dict:
             "Fluency_structure_complexity": "Low",
             "Fluency_organization": "Low",
             "Fluency_strategy_expression": "Low",
+            "Fluency_grammar": "High",
             "Fluency_state": (
                 "Fluency: Low / Sentence length: Low / Connector use: Low / "
-                "Structure complexity: Low / Organization: Low / Strategy expression: Low"
+                "Structure complexity: Low / Organization: Low / Strategy expression: Low / Grammar: High"
             ),
             "Fluency_connector_examples": "",
             "Fluency_feature_note": "No usable responses were available for fluency analysis.",
@@ -1567,6 +1625,7 @@ def evaluate_fluency(answers: dict) -> dict:
     structure_label = score_to_label(average_feature("structure_label"))
     organization_label = score_to_label(average_feature("organization_label"))
     strategy_label = score_to_label(average_feature("strategy_label"))
+    grammar_label = score_to_label(average_feature("grammar_label"))
 
     averaged_non_low = sum(
         label != "Low"
@@ -1576,6 +1635,7 @@ def evaluate_fluency(answers: dict) -> dict:
             structure_label,
             organization_label,
             strategy_label,
+            grammar_label,
         ]
     )
     averaged_high = sum(
@@ -1586,6 +1646,7 @@ def evaluate_fluency(answers: dict) -> dict:
             structure_label,
             organization_label,
             strategy_label,
+            grammar_label,
         ]
     )
 
@@ -1616,15 +1677,17 @@ def evaluate_fluency(answers: dict) -> dict:
         "Fluency_structure_complexity": structure_label,
         "Fluency_organization": organization_label,
         "Fluency_strategy_expression": strategy_label,
+        "Fluency_grammar": grammar_label,
         "Fluency_state": (
             f"Fluency: {overall_label} / Sentence length: {sentence_length_label} / "
             f"Connector use: {connector_label} / Structure complexity: {structure_label} / "
-            f"Organization: {organization_label} / Strategy expression: {strategy_label}"
+            f"Organization: {organization_label} / Strategy expression: {strategy_label} / "
+            f"Grammar: {grammar_label}"
         ),
         "Fluency_connector_examples": ", ".join(connector_examples),
         "Fluency_feature_note": (
             "Based on sentence length, connector use, structure complexity, "
-            "organization, and strategy expression across the learner's responses."
+            "organization, strategy expression, and grammar across the learner's responses."
         ),
     }
 
@@ -1953,6 +2016,7 @@ def evaluate_state(answers: dict) -> dict:
         "Fluency_structure_complexity": fluency["Fluency_structure_complexity"],
         "Fluency_organization": fluency["Fluency_organization"],
         "Fluency_strategy_expression": fluency["Fluency_strategy_expression"],
+        "Fluency_grammar": fluency["Fluency_grammar"],
         "Fluency_state": fluency["Fluency_state"],
         "Fluency_connector_examples": fluency["Fluency_connector_examples"],
         "Fluency_feature_note": fluency["Fluency_feature_note"],
@@ -3128,6 +3192,25 @@ if st.session_state.submission_complete:
     def _sub_value_class(level: str) -> str:
         return {"High": "result-sub-high", "Mid": "result-sub-mid"}.get(level, "result-sub-low")
 
+    def _hml_score(level: str) -> int:
+        return {"High": 2, "Mid": 1, "Low": 0}.get(level, 1)
+
+    def _avg_to_label(scores: list) -> str:
+        avg = sum(scores) / len(scores) if scores else 1
+        if avg >= 1.4:
+            return "High"
+        if avg >= 0.6:
+            return "Mid"
+        return "Low"
+
+    def _overall_row(label: str, ko_text: str) -> str:
+        return (
+            f"<div class='result-overall-row'>"
+            f"{_level_badge(label)}"
+            f"<span class='result-level-label'>{html.escape(ko_text)}</span>"
+            f"</div>"
+        )
+
     def _sub_items(items: list) -> str:
         parts = []
         for name, value in items:
@@ -3155,13 +3238,20 @@ if st.session_state.submission_complete:
     # ── Fluency ──────────────────────────────────────────────
     st.markdown("<div class='result-section-title'>Fluency / 유창성</div>", unsafe_allow_html=True)
     fluency_overall = ev.get("Fluency", "—")
+    grammar_level = ev.get("Fluency_grammar", "—")
     fluency_subs = [
         ("Sentence Length", ev.get("Fluency_sentence_length", "—")),
         ("Connector Use", ev.get("Fluency_connector_use", "—")),
         ("Structure", ev.get("Fluency_structure_complexity", "—")),
         ("Organization", ev.get("Fluency_organization", "—")),
         ("Strategy Use", ev.get("Fluency_strategy_expression", "—")),
+        ("Grammar", grammar_level),
     ]
+    grammar_desc = {
+        "High": "문법 오류가 거의 발견되지 않았습니다.",
+        "Mid": "일부 문법 오류가 나타났지만 전달은 가능합니다.",
+        "Low": "주어-동사 일치, 조동사 사용 등 문법 오류가 자주 나타났습니다.",
+    }.get(grammar_level, "")
     connector_examples = ev.get("Fluency_connector_examples", "")
     connector_note = (
         f"Connectors used / 사용한 연결어: <b>{html.escape(connector_examples)}</b><br>"
@@ -3175,8 +3265,11 @@ if st.session_state.submission_complete:
         f"<span class='result-level-label'>전반적 유창성 수준</span>"
         f"</div>"
         f"{_sub_items(fluency_subs)}"
-        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085'>{connector_note}"
-        f"문장 길이, 연결어 사용, 구조 복잡성, 조직력, 전략 표현을 종합하여 평가합니다.</div>"
+        f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
+        f"{connector_note}"
+        f"<b>Grammar:</b> {html.escape(grammar_desc)}<br>"
+        f"문장 길이, 연결어 사용, 구조 복잡성, 조직력, 전략 표현, 문법 정확성을 종합하여 평가합니다."
+        f"</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -3185,6 +3278,10 @@ if st.session_state.submission_complete:
     st.markdown("<div class='result-section-title'>Emotion / 감정</div>", unsafe_allow_html=True)
     fla = ev.get("FLA", "—")
     fle = ev.get("FLE", "—")
+    # FLA: Low anxiety = good (invert), FLE: High enjoyment = good
+    fla_inv_score = {"Low": 2, "Mid": 1, "High": 0}.get(fla, 1)
+    fle_score = _hml_score(fle)
+    emotion_overall = _avg_to_label([fla_inv_score, fle_score])
     emotion_subs = [
         ("Anxiety (FLA)", fla),
         ("Enjoyment (FLE)", fle),
@@ -3202,6 +3299,7 @@ if st.session_state.submission_complete:
     st.markdown(
         f"<div class='result-card'>"
         f"<div class='result-card-title'>Foreign Language Anxiety &amp; Enjoyment</div>"
+        f"{_overall_row(emotion_overall, '전반적 감정 수준')}"
         f"{_sub_items(emotion_subs)}"
         f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
         f"<b>Anxiety:</b> {html.escape(fla_desc)}<br>"
@@ -3215,6 +3313,7 @@ if st.session_state.submission_complete:
     st.markdown("<div class='result-section-title'>Cognition / 인지</div>", unsafe_allow_html=True)
     self_efficacy = ev.get("Self_efficacy", "—")
     metacognition = ev.get("Metacognition", "—")
+    cognition_overall = _avg_to_label([_hml_score(self_efficacy), _hml_score(metacognition)])
     cognition_subs = [
         ("Self-Efficacy", self_efficacy),
         ("Metacognition", metacognition),
@@ -3232,6 +3331,7 @@ if st.session_state.submission_complete:
     st.markdown(
         f"<div class='result-card'>"
         f"<div class='result-card-title'>Self-Efficacy &amp; Metacognition</div>"
+        f"{_overall_row(cognition_overall, '전반적 인지 수준')}"
         f"{_sub_items(cognition_subs)}"
         f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
         f"<b>Self-Efficacy:</b> {html.escape(se_desc)}<br>"
@@ -3246,6 +3346,8 @@ if st.session_state.submission_complete:
     wtc = ev.get("WTC", "—")
     coping = ev.get("Coping", "—")
     engagement = ev.get("Engagement", "—")
+    coping_score = {"Active": 2, "Mixed": 1, "Avoidant": 0}.get(coping, 1)
+    behavior_overall = _avg_to_label([_hml_score(wtc), coping_score, _hml_score(engagement)])
     behavior_subs = [
         ("WTC", wtc),
         ("Coping", coping),
@@ -3269,6 +3371,7 @@ if st.session_state.submission_complete:
     st.markdown(
         f"<div class='result-card'>"
         f"<div class='result-card-title'>Willingness to Communicate &amp; Coping</div>"
+        f"{_overall_row(behavior_overall, '전반적 행동 수준')}"
         f"{_sub_items(behavior_subs)}"
         f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
         f"<b>WTC:</b> {html.escape(wtc_desc)}<br>"
@@ -3283,6 +3386,8 @@ if st.session_state.submission_complete:
     st.markdown("<div class='result-section-title'>Strategy / 전략</div>", unsafe_allow_html=True)
     strategy_type = ev.get("Strategy_type", "—")
     strategy_quality = ev.get("Strategy_quality", "—")
+    strategy_quality_score = {"Effective": 2, "Limited": 1, "Avoidant": 0}.get(strategy_quality, 1)
+    strategy_overall = _avg_to_label([strategy_quality_score])
     strategy_subs = [
         ("Type", strategy_type),
         ("Quality", strategy_quality),
@@ -3307,6 +3412,7 @@ if st.session_state.submission_complete:
     st.markdown(
         f"<div class='result-card'>"
         f"<div class='result-card-title'>Learning Strategy</div>"
+        f"{_overall_row(strategy_overall, '전반적 전략 수준')}"
         f"{_sub_items(strategy_subs)}"
         f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
         f"<b>Type:</b> {html.escape(type_desc)}<br>"
