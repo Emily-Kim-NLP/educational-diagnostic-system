@@ -1361,13 +1361,10 @@ def detect_grammar_errors(text: str) -> str:
     """
     Use LanguageTool to detect grammar errors and return High / Mid / Low.
 
-    Scoring is based on error density (errors per 100 words) so that
-    longer answers are not unfairly penalised compared to short ones.
-
-    Density thresholds (calibrated for EFL short-answer writing):
-      High : < 10 errors per 100 words  (fluent, minor slips acceptable)
-      Mid  : 10–22 errors per 100 words
-      Low  : > 22 errors per 100 words
+    Thresholds:
+      High : 0 errors detected
+      Mid  : 1+ errors, density <= 20 errors per 100 words
+      Low  : density > 20 errors per 100 words
     """
     if not text or not text.strip():
         return "High"
@@ -1387,12 +1384,13 @@ def detect_grammar_errors(text: str) -> str:
     ]
 
     error_count = len(filtered)
+    if error_count == 0:
+        return "High"
+
     wc = max(len(text.split()), 1)
     density = error_count / wc * 100  # errors per 100 words
 
-    if density < 10:
-        return "High"
-    if density <= 22:
+    if density <= 20:
         return "Mid"
     return "Low"
 
