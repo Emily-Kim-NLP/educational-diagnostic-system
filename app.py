@@ -33,24 +33,23 @@ def _get_language_tool():
     return language_tool_python.LanguageTool("en-US")
 
 
-# Rule categories to ignore (punctuation/style/typos produce too many false positives for EFL learners)
+# Rule categories to ignore — style/punctuation/redundancy are not core grammar errors for EFL learners
 _GRAMMAR_IGNORE_CATEGORIES = {
-    "TYPOGRAPHY",
-    "PUNCTUATION",
-    "CASING",
     "STYLE",
     "REDUNDANCY",
     "PLAIN_ENGLISH",
     "MISC",
-    "TYPOS",          # Missing apostrophes (dont → don't) are minor for EFL learners
+    "PUNCTUATION",   # Comma placement rules are stylistic, not grammar errors for EFL
+    "TYPOGRAPHY",
 }
+# Specific noisy rules to ignore regardless of category
 _GRAMMAR_IGNORE_RULE_IDS = {
-    "UPPERCASE_SENTENCE_START",
     "SENTENCE_WHITESPACE",
     "COMMA_PARENTHESIS_WHITESPACE",
     "EN_QUOTES",
     "DOUBLE_PUNCTUATION",
     "WORD_CONTAINS_UNDERSCORE",
+    "WHITESPACE_RULE",
 }
 
 
@@ -1357,42 +1356,72 @@ def build_answer_feedback_map(
 # -----------------------------
 # Evaluation helpers
 # -----------------------------
-def detect_grammar_errors(text: str) -> str:
+def detect_grammar_errors(text: str, api_key: str = "", model: str = "") -> str:
     """
-    Use LanguageTool to detect grammar errors and return High / Mid / Low.
+    Use OpenAI to count grammar errors and return High / Mid / Low.
 
-    Thresholds:
-      High : 0 errors detected
-      Mid  : 1+ errors, density <= 20 errors per 100 words
-      Low  : density > 20 errors per 100 words
+    Thresholds (absolute error count):
+      High : 0 errors
+      Mid  : 1–3 errors
+      Low  : 4+ errors
+
+    Falls back to LanguageTool if OpenAI is unavailable.
     """
     if not text or not text.strip():
         return "High"
 
+    # --- OpenAI path ---
+    if api_key:
+        try:
+            client = get_openai_client(api_key)
+            response = client.chat.completions.create(
+                model=model or DEFAULT_LLM_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a grammar checker for EFL learners. "
+                            "Count the number of grammar errors in the given text. "
+                            "Focus on: subject-verb agreement, verb tense, article usage, "
+                            "preposition errors, word form errors, and capitalization of 'I'. "
+                            "Return only valid JSON with one key: {\"error_count\": <integer>}. "
+                            "Do not include any explanation."
+                        ),
+                    },
+                    {"role": "user", "content": text},
+                ],
+                temperature=0,
+                max_tokens=20,
+            )
+            raw = response.choices[0].message.content.strip()
+            error_count = json.loads(raw).get("error_count", 0)
+            if error_count == 0:
+                return "High"
+            if error_count <= 3:
+                return "Mid"
+            return "Low"
+        except Exception:
+            pass  # fall through to LanguageTool
+
+    # --- LanguageTool fallback ---
     try:
         tool = _get_language_tool()
         matches = tool.check(text)
+        filtered = [
+            m for m in matches
+            if m.category not in _GRAMMAR_IGNORE_CATEGORIES
+            and m.rule_id not in _GRAMMAR_IGNORE_RULE_IDS
+        ]
+        error_count = len(filtered)
+        if error_count == 0:
+            return "High"
+        wc = max(len(text.split()), 1)
+        density = error_count / wc * 100
+        if density <= 30:
+            return "Mid"
+        return "Low"
     except Exception:
-        # If LanguageTool is unavailable, fall back to High to avoid blocking
         return "High"
-
-    # Filter out noise (punctuation/style/casing rules)
-    filtered = [
-        m for m in matches
-        if m.category not in _GRAMMAR_IGNORE_CATEGORIES
-        and m.rule_id not in _GRAMMAR_IGNORE_RULE_IDS
-    ]
-
-    error_count = len(filtered)
-    if error_count == 0:
-        return "High"
-
-    wc = max(len(text.split()), 1)
-    density = error_count / wc * 100  # errors per 100 words
-
-    if density <= 20:
-        return "Mid"
-    return "Low"
 
 
 def detect_connectors(text: str) -> list:
@@ -1505,14 +1534,14 @@ def label_to_score(label: str) -> int:
     return {"Low": 0, "Mid": 1, "High": 2}.get(label, 0)
 
 
-def analyze_fluency_features(text: str) -> dict:
+def analyze_fluency_features(text: str, api_key: str = "", model: str = "") -> dict:
     wc = word_count(text)
     sc = sentence_count(text)
     connectors = detect_connectors(text)
     structure_markers = detect_structure_markers(text)
     organization_markers = detect_organization_markers(text)
     strategy_expressions = detect_strategy_expressions(text)
-    grammar_label = detect_grammar_errors(text)
+    grammar_label = detect_grammar_errors(text, api_key=api_key, model=model)
 
     avg_sentence_length = wc / sc if sc else 0.0
 
@@ -1608,9 +1637,9 @@ def fluency_label(text: str) -> str:
     return analyze_fluency_features(text)["overall_label"]
 
 
-def evaluate_fluency(answers: dict) -> dict:
+def evaluate_fluency(answers: dict, api_key: str = "", model: str = "") -> dict:
     analyses = [
-        analyze_fluency_features(answer)
+        analyze_fluency_features(answer, api_key=api_key, model=model)
         for answer in answers.values()
         if answer.strip()
     ]
@@ -2016,8 +2045,8 @@ def classify_strategy(text: str) -> tuple:
     return strategy_type, strategy_quality
 
 
-def evaluate_state(answers: dict) -> dict:
-    fluency = evaluate_fluency(answers)
+def evaluate_state(answers: dict, api_key: str = "", model: str = "") -> dict:
+    fluency = evaluate_fluency(answers, api_key=api_key, model=model)
     fla, fle = classify_fla_fle(answers.get("q4", ""))
     self_efficacy, metacognition = classify_self_efficacy_metacognition(answers.get("q6", ""))
     wtc, coping, engagement = classify_behavior(answers.get("q8", ""))
@@ -2126,8 +2155,10 @@ def build_evaluation_row(
     cefr_level: str,
     questionnaire: dict,
     answers: dict,
+    api_key: str = "",
+    model: str = "",
 ) -> dict:
-    evaluation = evaluate_state(answers)
+    evaluation = evaluate_state(answers, api_key=api_key, model=model)
 
     return {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -3959,6 +3990,8 @@ if submit_clicked:
                 cefr_level=st.session_state.cefr_level_value,
                 questionnaire=current_questionnaire,
                 answers=current_answers,
+                api_key=llm_config["api_key"],
+                model=llm_config["model"],
             )
 
             try:
@@ -3980,7 +4013,11 @@ if submit_clicked:
             else:
                 st.session_state.last_submission_id = submission_id
                 st.session_state.last_storage_backend = response_save_result["backend"]
-                st.session_state.last_evaluation_result = evaluate_state(current_answers)
+                st.session_state.last_evaluation_result = evaluate_state(
+                    current_answers,
+                    api_key=llm_config["api_key"],
+                    model=llm_config["model"],
+                )
 
                 if response_save_result["backend"] == "google_sheets":
                     st.session_state.last_response_file = (
