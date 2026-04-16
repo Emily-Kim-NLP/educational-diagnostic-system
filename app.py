@@ -3284,25 +3284,52 @@ if st.session_state.submission_complete:
     # ── Fluency ──────────────────────────────────────────────
     st.markdown("<div class='result-section-title'>Fluency / 유창성</div>", unsafe_allow_html=True)
     fluency_overall = ev.get("Fluency", "—")
+    sentence_length_level = ev.get("Fluency_sentence_length", "—")
+    connector_level = ev.get("Fluency_connector_use", "—")
+    structure_level = ev.get("Fluency_structure_complexity", "—")
+    organization_level = ev.get("Fluency_organization", "—")
+    strategy_expr_level = ev.get("Fluency_strategy_expression", "—")
     grammar_level = ev.get("Fluency_grammar", "—")
     fluency_subs = [
-        ("Sentence Length", ev.get("Fluency_sentence_length", "—")),
-        ("Connector Use", ev.get("Fluency_connector_use", "—")),
-        ("Structure", ev.get("Fluency_structure_complexity", "—")),
-        ("Organization", ev.get("Fluency_organization", "—")),
-        ("Strategy Use", ev.get("Fluency_strategy_expression", "—")),
+        ("Sentence Length", sentence_length_level),
+        ("Connector Use", connector_level),
+        ("Structure", structure_level),
+        ("Organization", organization_level),
+        ("Strategy Use", strategy_expr_level),
         ("Grammar", grammar_level),
     ]
-    grammar_desc = {
+    sl_desc = {
+        "High": "문장이 충분히 길고 내용이 풍부합니다.",
+        "Mid": "문장 길이가 보통 수준입니다.",
+        "Low": "문장이 짧고 내용이 단순한 편입니다.",
+    }.get(sentence_length_level, "")
+    connector_examples = ev.get("Fluency_connector_examples", "")
+    conn_ex_note = f" (사용: <b>{html.escape(connector_examples)}</b>)" if connector_examples else ""
+    cn_desc = {
+        "High": "because, but, so 등 다양한 연결어를 잘 활용합니다.",
+        "Mid": "연결어를 일부 사용하고 있습니다.",
+        "Low": "연결어 사용이 거의 나타나지 않았습니다.",
+    }.get(connector_level, "")
+    st_desc = {
+        "High": "복문 구조를 활용하여 문장을 구성합니다.",
+        "Mid": "문장 구조가 어느 정도 다양합니다.",
+        "Low": "단순한 문장 구조가 주로 사용되었습니다.",
+    }.get(structure_level, "")
+    org_desc = {
+        "High": "first, then, finally 등 구성 마커를 사용하여 내용을 잘 조직합니다.",
+        "Mid": "내용 구성이 어느 정도 나타납니다.",
+        "Low": "내용의 조직력이 낮게 나타났습니다.",
+    }.get(organization_level, "")
+    se_fl_desc = {
+        "High": "I think, I feel 등 자신의 생각을 표현하는 어구를 잘 활용합니다.",
+        "Mid": "전략적 표현을 일부 사용합니다.",
+        "Low": "자신의 생각이나 느낌을 표현하는 어구가 적게 나타났습니다.",
+    }.get(strategy_expr_level, "")
+    gr_desc = {
         "High": "문법 오류가 거의 발견되지 않았습니다.",
         "Mid": "일부 문법 오류가 나타났지만 전달은 가능합니다.",
         "Low": "주어-동사 일치, 조동사 사용 등 문법 오류가 자주 나타났습니다.",
     }.get(grammar_level, "")
-    connector_examples = ev.get("Fluency_connector_examples", "")
-    connector_note = (
-        f"Connectors used / 사용한 연결어: <b>{html.escape(connector_examples)}</b><br>"
-        if connector_examples else ""
-    )
     st.markdown(
         f"<div class='result-card'>"
         f"<div class='result-card-title'>Overall Fluency Level</div>"
@@ -3312,9 +3339,12 @@ if st.session_state.submission_complete:
         f"</div>"
         f"{_sub_items(fluency_subs)}"
         f"<div style='margin-top:0.65rem;font-size:0.84rem;color:#5a7085;line-height:1.6'>"
-        f"{connector_note}"
-        f"<b>Grammar:</b> {html.escape(grammar_desc)}<br>"
-        f"문장 길이, 연결어 사용, 구조 복잡성, 조직력, 전략 표현, 문법 정확성을 종합하여 평가합니다."
+        f"<b>Sentence Length:</b> {html.escape(sl_desc)}<br>"
+        f"<b>Connector Use:</b> {html.escape(cn_desc)}{conn_ex_note}<br>"
+        f"<b>Structure:</b> {html.escape(st_desc)}<br>"
+        f"<b>Organization:</b> {html.escape(org_desc)}<br>"
+        f"<b>Strategy Use:</b> {html.escape(se_fl_desc)}<br>"
+        f"<b>Grammar:</b> {html.escape(gr_desc)}"
         f"</div>"
         f"</div>",
         unsafe_allow_html=True,
